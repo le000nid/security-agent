@@ -5,4 +5,4 @@
 ```bash
 docker compose up -d juice-shop
 ```
-
+Адрес локального сайта http://localhost:3000
