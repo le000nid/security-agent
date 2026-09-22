@@ -1,0 +1,11 @@
+[
+  {"tool": "semgrep", "title": "python-debug-enabled", "source": "SAST", "category": "configuration"},
+  {"tool": "semgrep", "title": "python-subprocess-shell-true", "source": "SAST", "category": "command-execution"},
+  {"tool": "semgrep", "title": "python-unsafe-pickle-deserialization", "source": "SAST", "category": "deserialization"},
+  {"tool": "semgrep", "title": "python-obvious-hardcoded-secret", "source": "SAST", "category": "secrets"},
+  {"tool": "semgrep", "title": "python-tls-verification-disabled", "source": "SAST", "category": "transport-security"},
+  {"tool": "semgrep", "title": "javascript-tls-verification-disabled", "source": "SAST", "category": "configuration"},
+  {"tool": "semgrep", "title": "javascript-obvious-hardcoded-secret", "source": "SAST", "category": "secrets"},
+  {"tool": "semgrep", "title": "javascript-child-process-exec", "source": "SAST", "category": "command-execution"},
+  {"tool": "semgrep", "title": "javascript-eval-usage", "source": "SAST", "category": "code-injection"}
+]

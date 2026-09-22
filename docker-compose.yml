@@ -1,6 +1,35 @@
 services:
   juice-shop:
-    image: bkimminich/juice-shop
+    image: bkimminich/juice-shop:latest
     container_name: juice-shop
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/nodejs/bin/node",
+          "-e",
+          "require('http').get('http://127.0.0.1:3000',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+  agent:
+    profiles: ["agent"]
+    build: .
+    image: ai-security-agent:0.2.2
+    depends_on:
+      juice-shop:
+        condition: service_healthy
+    environment:
+      LLM_PROVIDER: ${LLM_PROVIDER:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+    volumes:
+      - ./logs:/agent/logs
+      - ./reports:/agent/reports
+      - ./targets:/targets:ro

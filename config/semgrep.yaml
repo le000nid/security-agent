@@ -1,0 +1,107 @@
+rules:
+  - id: python-debug-enabled
+    languages: [python]
+    severity: WARNING
+    message: Debug mode should be disabled outside the local development environment.
+    pattern: $APP.run(..., debug=True, ...)
+    metadata:
+      category: configuration
+      confidence: HIGH
+      recommendation: Disable debug mode outside local development.
+  - id: python-subprocess-shell-true
+    languages: [python]
+    severity: WARNING
+    message: A subprocess call enables shell parsing and requires manual review.
+    patterns:
+      - pattern: subprocess.$FUNC(..., shell=True, ...)
+      - metavariable-regex:
+          metavariable: $FUNC
+          regex: ^(run|call|check_call|check_output|Popen)$
+    metadata:
+      category: command-execution
+      confidence: HIGH
+      recommendation: Pass an argument list without shell=True whenever possible.
+  - id: python-unsafe-pickle-deserialization
+    languages: [python]
+    severity: ERROR
+    message: Pickle deserialization can execute code when input is untrusted.
+    pattern-either:
+      - pattern: pickle.load(...)
+      - pattern: pickle.loads(...)
+    metadata:
+      category: deserialization
+      confidence: HIGH
+      recommendation: Use a non-executable serialization format for untrusted data.
+  - id: python-obvious-hardcoded-secret
+    languages: [python]
+    severity: WARNING
+    message: An obvious secret-like variable is assigned a literal string.
+    patterns:
+      - pattern: $KEY = $VALUE
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: (?i)^(api_key|secret_key|access_token|auth_token|password)$
+      - metavariable-regex:
+          metavariable: $VALUE
+          regex: ^["'][^"']{8,}["']$
+    metadata:
+      category: secrets
+      confidence: MEDIUM
+      recommendation: Load credentials from an approved secret store or runtime environment.
+  - id: python-tls-verification-disabled
+    languages: [python]
+    severity: WARNING
+    message: A requests call explicitly disables TLS certificate verification.
+    pattern: requests.$METHOD(..., verify=False, ...)
+    metadata:
+      category: transport-security
+      confidence: HIGH
+      recommendation: Keep certificate verification enabled and configure trusted certificates.
+  - id: javascript-tls-verification-disabled
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: Enable TLS certificate verification.
+    pattern: "{..., rejectUnauthorized: false, ...}"
+    metadata:
+      category: configuration
+      confidence: HIGH
+      recommendation: Keep TLS certificate validation enabled.
+  - id: javascript-obvious-hardcoded-secret
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: An obvious secret-like variable is assigned a literal string.
+    patterns:
+      - pattern-either:
+          - pattern: const $KEY = $VALUE
+          - pattern: let $KEY = $VALUE
+          - pattern: var $KEY = $VALUE
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: (?i)^(apiKey|secretKey|accessToken|authToken|password)$
+      - metavariable-regex:
+          metavariable: $VALUE
+          regex: ^["'`][^"'`]{8,}["'`]$
+    metadata:
+      category: secrets
+      confidence: MEDIUM
+      recommendation: Load credentials from an approved secret store or runtime environment.
+  - id: javascript-child-process-exec
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: A child_process command execution call requires manual input-safety review.
+    pattern-either:
+      - pattern: child_process.exec(...)
+      - pattern: child_process.execSync(...)
+    metadata:
+      category: command-execution
+      confidence: MEDIUM
+      recommendation: Prefer argument-based process APIs and validate all untrusted input.
+  - id: javascript-eval-usage
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: Runtime evaluation of a string requires manual review.
+    pattern: eval(...)
+    metadata:
+      category: code-injection
+      confidence: HIGH
+      recommendation: Replace eval with explicit parsing or direct application logic.
