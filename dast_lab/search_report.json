@@ -1,0 +1,34 @@
+{
+  "checked_at": "2026-09-28T18:20:50.626646+00:00",
+  "target": "http://localhost:3000/rest/products/search",
+  "controls_ok": true,
+  "sqlite_error_disclosed": true,
+  "sql_injection_suspected": true,
+  "sql_injection_confirmed": false,
+  "results": [
+    {
+      "query": "apple",
+      "http_status": 200,
+      "product_count": 3,
+      "sqlite_error": false
+    },
+    {
+      "query": "zzzz_no_such_product_762",
+      "http_status": 200,
+      "product_count": 0,
+      "sqlite_error": false
+    },
+    {
+      "query": "apple'",
+      "http_status": 500,
+      "product_count": null,
+      "sqlite_error": true
+    },
+    {
+      "query": "apple''",
+      "http_status": 200,
+      "product_count": 0,
+      "sqlite_error": false
+    }
+  ]
+}
