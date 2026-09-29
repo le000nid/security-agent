@@ -1,0 +1,8 @@
+rules:
+  - id: test-login
+    languages: [javascript, typescript]
+    severity: CRITICAL
+    message: "Логин плохо работает"
+    patterns:
+      - pattern: $DB.query(...)
+      - pattern-regex: '.*\+.*'

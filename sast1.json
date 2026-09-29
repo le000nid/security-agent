@@ -1,0 +1,25 @@
+[
+  {
+    "check_id": "test-login",
+    "path": "juice-shop/data/static/codefixes/dbSchemaChallenge_1.ts",
+    "start": {
+      "line": 5,
+      "col": 5,
+      "offset": 261
+    },
+    "end": {
+      "line": 5,
+      "col": 163,
+      "offset": 419
+    },
+    "extra": {
+      "message": "Логин плохо работает",
+      "metadata": {},
+      "severity": "CRITICAL",
+      "fingerprint": "requires login",
+      "lines": "requires login",
+      "validation_state": "NO_VALIDATOR",
+      "engine_kind": "OSS"
+    }
+  }
+]

@@ -1,0 +1,8 @@
+rules:
+  - id: eval-usage
+    languages: [javascript, typescript]
+    severity: CRITICAL
+    message: "eval() — выполнение произвольного кода. CWE-95."
+    metadata:
+      cwe: "CWE-95"
+    pattern: eval(...)

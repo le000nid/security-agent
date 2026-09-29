@@ -1,0 +1,52 @@
+[
+  {
+    "check_id": "eval-usage",
+    "path": "juice-shop/routes/captcha.ts",
+    "start": {
+      "line": 22,
+      "col": 20,
+      "offset": 874
+    },
+    "end": {
+      "line": 22,
+      "col": 36,
+      "offset": 890
+    },
+    "extra": {
+      "message": "eval() — выполнение произвольного кода. CWE-95.",
+      "metadata": {
+        "cwe": "CWE-95"
+      },
+      "severity": "CRITICAL",
+      "fingerprint": "requires login",
+      "lines": "requires login",
+      "validation_state": "NO_VALIDATOR",
+      "engine_kind": "OSS"
+    }
+  },
+  {
+    "check_id": "eval-usage",
+    "path": "juice-shop/routes/userProfile.ts",
+    "start": {
+      "line": 65,
+      "col": 22,
+      "offset": 2010
+    },
+    "end": {
+      "line": 65,
+      "col": 32,
+      "offset": 2020
+    },
+    "extra": {
+      "message": "eval() — выполнение произвольного кода. CWE-95.",
+      "metadata": {
+        "cwe": "CWE-95"
+      },
+      "severity": "CRITICAL",
+      "fingerprint": "requires login",
+      "lines": "requires login",
+      "validation_state": "NO_VALIDATOR",
+      "engine_kind": "OSS"
+    }
+  }
+]
