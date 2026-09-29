@@ -1,3 +1,6 @@
+<img width="1800" height="900" alt="image" src="https://github.com/user-attachments/assets/4c29fbca-471f-4824-9207-9a7529f4d129" />
+
+
 # Проверка поиска OWASP Juice Shop
 
 Учебная DAST-проверка локального приложения по адресу
