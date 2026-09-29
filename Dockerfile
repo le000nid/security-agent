@@ -1,17 +1,33 @@
-FROM golang:1.24-bookworm AS nuclei-build
+# syntax=docker/dockerfile:1
+FROM --platform=$BUILDPLATFORM golang:1.24.13-bookworm AS nuclei-build
+ARG TARGETOS
+ARG TARGETARCH
 ARG NUCLEI_VERSION=v3.4.10
-RUN go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@${NUCLEI_VERSION}
+RUN test "$TARGETOS" = linux && case "$TARGETARCH" in amd64|arm64) ;; *) exit 1 ;; esac
+# Go verifies downloaded module checksums through sum.golang.org.
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+    go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@${NUCLEI_VERSION} && \
+    mkdir -p /out && find /go/bin -type f -name nuclei -exec cp {} /out/nuclei \;
 
-FROM python:3.12-slim
+FROM python:3.11.14-slim-bookworm
 WORKDIR /agent
-COPY requirements.txt .
+ARG SEMGREP_VERSION=1.120.0
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 HOME=/tmp/agent-home
+COPY requirements.txt ./
 # Semgrep's tracing dependency still imports pkg_resources.
-RUN pip install --no-cache-dir -r requirements.txt semgrep==1.120.0 setuptools==80.9.0
-COPY --from=nuclei-build /go/bin/nuclei /usr/local/bin/nuclei
+RUN pip install --no-cache-dir -r requirements.txt semgrep==${SEMGREP_VERSION} setuptools==80.9.0
+COPY --from=nuclei-build /out/nuclei /usr/local/bin/nuclei
 COPY app ./app
 COPY config ./config
 COPY benchmark ./benchmark
 COPY targets ./targets
-RUN useradd --create-home agent && mkdir logs reports && chown -R agent:agent /agent
-USER agent
-ENTRYPOINT ["python", "-m", "app.main"]
+COPY pyproject.toml ./
+RUN pip install --no-cache-dir --no-deps --no-build-isolation . && \
+    useradd --uid 1000 --create-home agent && \
+    mkdir -p logs reports runs /tmp/agent-home && \
+    chown -R agent:agent logs reports runs /tmp/agent-home && \
+    semgrep --version && nuclei -version
+USER 1000:1000
+ENTRYPOINT ["security-agent"]
+CMD ["--help"]

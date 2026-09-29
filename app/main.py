@@ -1,6 +1,7 @@
 """Command-line entry point for ai-security-agent."""
 
 import argparse
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -45,6 +46,20 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def run(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] in {
+        "scan",
+        "deterministic",
+        "agent",
+        "doctor",
+        "latest",
+        "--version",
+        "--help",
+        "-h",
+    }:
+        from app.cli import run as run_cli
+
+        return run_cli(argv)
     load_dotenv()
     args = build_parser().parse_args(argv)
     console = Console()

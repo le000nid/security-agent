@@ -221,7 +221,7 @@ def test_chat_content_model_auth_reasoning_ignored_and_usage(
     assert (method, url) == ("POST", f"{BASE_URL}/chat/completions")
     assert kwargs["headers"] == {"Authorization": "Bearer runtime-secret"}
     assert kwargs["json"]["model"] == MODEL
-    assert kwargs["json"]["max_tokens"] == 600
+    assert kwargs["json"]["max_tokens"] == 1200
     assert "tools" not in kwargs["json"]
     assert "observed facts" in kwargs["json"]["messages"][0]["content"]
     assert "Modern browsers reject wildcard" in SYSTEM_PROMPT
@@ -374,7 +374,7 @@ def test_chat_timeout_is_retried(monkeypatch, configured, finding, enrichment_pa
     ("outcomes", "message"),
     [
         ([response(429)] * 3, "rate limited"),
-        ([response(500)] * 3, "gateway/backend failure"),
+        ([response(500)] * 3, "http error"),
     ],
 )
 def test_chat_transient_failure_stops_after_two_retries(
@@ -398,7 +398,7 @@ def test_chat_timeout_stops_after_two_retries(monkeypatch, configured, finding):
         monkeypatch, [response(payload=models_payload(MODEL)), *timeouts]
     )
     client = OpenAICompatibleClient(sleeper=lambda _: None)
-    with pytest.raises(ValueError, match="timed out after retries"):
+    with pytest.raises(ValueError, match="timeout"):
         client.enrich(finding)
     assert len(stub.calls) == 4
 
@@ -412,7 +412,7 @@ def test_finish_reason_and_schema_failures_are_not_retried(
         monkeypatch,
         [response(payload=models_payload(MODEL)), response(payload=invalid)],
     )
-    with pytest.raises(ValueError, match="Incomplete"):
+    with pytest.raises(ValueError, match="response truncated"):
         OpenAICompatibleClient(sleeper=lambda _: None).enrich(finding)
     assert len(stub.calls) == 2
 
@@ -422,7 +422,7 @@ def test_malformed_chat_json_is_not_retried(monkeypatch, configured, finding):
         monkeypatch,
         [response(payload=models_payload(MODEL)), response(content=b"not-json")],
     )
-    with pytest.raises(ValueError, match="Invalid OpenAI-compatible chat response"):
+    with pytest.raises(ValueError, match="schema validation"):
         OpenAICompatibleClient(sleeper=lambda _: None).enrich(finding)
     assert len(stub.calls) == 2
 
@@ -531,3 +531,115 @@ def test_enrichment_schema_forbids_identity_fields(enrichment_payload):
     ):
         with pytest.raises(ValidationError):
             Enrichment.model_validate({**enrichment_payload, field: "changed"})
+
+
+def test_planner_usage_separate_from_enrichment(monkeypatch, configured):
+    from app.agent.models import AgentState
+    from app.agent.planner import Planner
+
+    stub, _ = install_stub(
+        monkeypatch,
+        [
+            response(payload=models_payload(MODEL)),
+            response(
+                payload=chat_payload(
+                    {"action": "RUN_DAST", "reasoning_short": "Target ready."},
+                    usage={
+                        "prompt_tokens": 40,
+                        "completion_tokens": 8,
+                        "total_tokens": 48,
+                    },
+                )
+            ),
+        ],
+    )
+    client = OpenAICompatibleClient(sleeper=lambda _: None)
+    Planner(client).choose(AgentState(run_id="test"), 8)
+    assert client.planner_usage.total_tokens == 48
+    assert client.usage.requests == 0
+    assert len(stub.calls) == 2
+
+
+def test_wildcard_finding_rejects_credentialed_overclaim(
+    monkeypatch, configured, enrichment_payload
+):
+    wildcard = Finding(
+        id="cors",
+        title="Wildcard CORS",
+        source="DAST",
+        tool="nuclei",
+        category="misconfig",
+        description="Access-Control-Allow-Origin: * observed",
+        raw_output_ref="logs/raw_nuclei.jsonl#L1",
+    )
+    enrichment_payload["description"] = (
+        "Access-Control-Allow-Origin: * combined with Access-Control-Allow-Credentials: true "
+        "allows credentialed cross-origin reads."
+    )
+    install_stub(
+        monkeypatch,
+        [
+            response(payload=models_payload(MODEL)),
+            response(payload=chat_payload(enrichment_payload)),
+        ],
+    )
+    with pytest.raises(ValueError, match="schema validation"):
+        enrich_findings([wildcard], OpenAICompatibleClient(sleeper=lambda _: None))
+    assert wildcard.category == "misconfig" and wildcard.normalized_category is None
+
+
+@pytest.mark.parametrize("ids", [["fixed-id", "second"], ["second", "fixed-id"]])
+def test_batch_preserves_identity_order(
+    monkeypatch, configured, finding, enrichment_payload, ids
+):
+    second = finding.model_copy(update={"id": "second"})
+    stub, _ = install_stub(
+        monkeypatch,
+        [
+            response(payload=models_payload(MODEL)),
+            response(
+                payload=chat_payload(
+                    {
+                        "results": [
+                            {"id": id_, "enrichment": enrichment_payload} for id_ in ids
+                        ]
+                    }
+                )
+            ),
+        ],
+    )
+    client = OpenAICompatibleClient(sleeper=lambda _: None)
+    findings, _ = enrich_findings([finding, second], client, batch_size=2)
+    assert [f.id for f in findings] == [finding.id, second.id]
+    assert all(f.category == "configuration" for f in findings)
+    assert client.usage.requests == 1
+    sent = stub.calls[1][2]["json"]["messages"][1]["content"]
+    assert "private" not in sent and "evidence" not in sent
+
+
+@pytest.mark.parametrize(
+    "ids", [[], ["fixed-id"], ["fixed-id", "fixed-id"], ["fixed-id", "extra"]]
+)
+def test_batch_rejects_missing_extra_duplicate_ids(
+    monkeypatch, configured, finding, enrichment_payload, ids
+):
+    install_stub(
+        monkeypatch,
+        [
+            response(payload=models_payload(MODEL)),
+            response(
+                payload=chat_payload(
+                    {
+                        "results": [
+                            {"id": id_, "enrichment": enrichment_payload} for id_ in ids
+                        ]
+                    }
+                )
+            ),
+        ],
+    )
+    client = OpenAICompatibleClient(sleeper=lambda _: None)
+    with pytest.raises(ValueError, match="batch (missing|extra|duplicate) id"):
+        enrich_findings(
+            [finding, finding.model_copy(update={"id": "second"})], client, batch_size=2
+        )

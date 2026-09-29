@@ -5,10 +5,11 @@ import subprocess
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from app.resources import config_directory
 from app.scanner_env import scanner_environment
 from app.validation import validate_target_url
 
-TEMPLATE_DIRECTORY = Path(__file__).resolve().parent.parent / "config/nuclei"
+TEMPLATE_DIRECTORY = config_directory() / "nuclei"
 
 
 class NucleiError(RuntimeError):

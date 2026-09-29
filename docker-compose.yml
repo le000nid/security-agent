@@ -1,7 +1,6 @@
 services:
   juice-shop:
     image: bkimminich/juice-shop:latest
-    container_name: juice-shop
     ports:
       - "127.0.0.1:3000:3000"
     restart: unless-stopped
@@ -20,7 +19,11 @@ services:
   agent:
     profiles: ["agent"]
     build: .
-    image: ai-security-agent:0.2.2
+    image: ${AGENT_IMAGE:-ai-security-agent:0.3.2}
+    user: "${AGENT_UID:-1000}:${AGENT_GID:-1000}"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
     depends_on:
       juice-shop:
         condition: service_healthy
@@ -29,7 +32,18 @@ services:
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
+      AGENT_MAX_STEPS: ${AGENT_MAX_STEPS:-8}
+      AGENT_MAX_PLANNER_CALLS: ${AGENT_MAX_PLANNER_CALLS:-8}
+      LLM_ENRICHMENT_BATCH_SIZE: ${LLM_ENRICHMENT_BATCH_SIZE:-1}
+      LLM_ENRICHMENT_MAX_TOKENS: ${LLM_ENRICHMENT_MAX_TOKENS:-1200}
+      LLM_ENRICHMENT_RETRY_MAX_TOKENS: ${LLM_ENRICHMENT_RETRY_MAX_TOKENS:-2200}
+      LLM_BRIEF_ENABLED: ${LLM_BRIEF_ENABLED:-true}
+      LLM_BRIEF_MAX_TOKENS: ${LLM_BRIEF_MAX_TOKENS:-1000}
+      LLM_BRIEF_RETRY_MAX_TOKENS: ${LLM_BRIEF_RETRY_MAX_TOKENS:-1600}
+      LLM_REPORT_TONE: ${LLM_REPORT_TONE:-professional}
+      LLM_REPORT_LANGUAGE: ${LLM_REPORT_LANGUAGE:-ru}
     volumes:
       - ./logs:/agent/logs
       - ./reports:/agent/reports
+      - ./runs:/agent/runs
       - ./targets:/targets:ro

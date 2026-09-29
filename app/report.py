@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from html import escape
 from pathlib import Path
 
+from app import __version__
 from app.models import SEVERITY_ORDER, Finding, finding_sort_key
 
 
@@ -111,7 +112,7 @@ def save_summary(
     severity_counts = Counter(f.severity for f in findings)
     source_counts = Counter(f.source for f in findings)
     payload = {
-        "version": "0.2.2",
+        "version": __version__,
         "mode": mode,
         "status": "completed",
         "target_url": target,

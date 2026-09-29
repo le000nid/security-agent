@@ -8,10 +8,11 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from app.models import Finding
+from app.resources import config_directory
 from app.scanner_env import scanner_environment
 from app.validation import validate_source_path
 
-RULES = Path(__file__).resolve().parent.parent / "config/semgrep.yaml"
+RULES = config_directory() / "semgrep.yaml"
 
 
 def _evidence(extra: dict) -> str:
