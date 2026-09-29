@@ -1,9 +1,9 @@
 import json
+from datetime import datetime, timezone
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
-from datetime import datetime, timezone
-from pathlib import Path
 
 
 def search_products(query):
@@ -67,9 +67,7 @@ def main():
         and missing.get("product_count") == 0
     )
 
-    error_disclosed = any(
-        result.get("sqlite_error", False) for result in results
-    )
+    error_disclosed = any(result.get("sqlite_error", False) for result in results)
 
     suspicious_pattern = (
         controls_ok
@@ -79,9 +77,20 @@ def main():
         and double_quote.get("product_count") == 0
     )
 
+    responses_received = all(result["http_status"] is not None for result in results)
+    assessment_status = (
+        "completed" if responses_received and controls_ok else "inconclusive"
+    )
+
+    if assessment_status == "inconclusive":
+        suspicious_pattern = None
+        if not error_disclosed:
+            error_disclosed = None
+
     report = {
         "checked_at": datetime.now(timezone.utc).isoformat(),
         "target": "http://localhost:3000/rest/products/search",
+        "assessment_status": assessment_status,
         "controls_ok": controls_ok,
         "sqlite_error_disclosed": error_disclosed,
         "sql_injection_suspected": suspicious_pattern,
@@ -95,10 +104,12 @@ def main():
         encoding="utf-8",
     )
 
-    print(f"\nКонтрольные проверки прошли: {controls_ok}")
+    print(f"\nСтатус проверки: {assessment_status}")
+    print(f"Контрольные проверки прошли: {controls_ok}")
     print(f"Раскрыта ошибка SQLite: {error_disclosed}")
     print(f"Признаки SQL-инъекции: {suspicious_pattern}")
     print(f"Отчёт сохранён: {output}")
-    
+
+
 if __name__ == "__main__":
     main()
