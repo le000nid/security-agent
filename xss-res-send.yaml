@@ -1,0 +1,10 @@
+rules:
+  - id: xss-res-send
+    languages: [javascript, typescript]
+    severity: HIGH
+    message: "XSS: конкатенация в res.send(). CWE-79."
+    metadata:
+      cwe: "CWE-79"
+      owasp: "A03:2021 - Injection"
+    patterns:
+      - pattern: $RES.send(... + ...)

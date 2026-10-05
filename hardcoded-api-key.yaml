@@ -1,0 +1,9 @@
+rules:
+  - id: hardcoded-api-key
+    languages: [generic]
+    severity: CRITICAL
+    message: "Возможный захардкоженный API-ключ. CWE-798."
+    metadata:
+      cwe: "CWE-798"
+    pattern-regex: |
+      (?i)(api[_-]?key|secret[_-]?key|access[_-]?token)\s*[:=]\s*["'][A-Za-z0-9_\-]{16,}["']

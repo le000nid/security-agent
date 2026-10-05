@@ -1,0 +1,10 @@
+rules:
+  - id: command-exec
+    languages: [javascript, typescript]
+    severity: CRITICAL
+    message: "exec() с конкатенацией — Command Injection. CWE-78."
+    metadata:
+      cwe: "CWE-78"
+      owasp: "A03:2021 - Injection"
+    patterns:
+      - pattern: exec(... + ...)

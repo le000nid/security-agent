@@ -1,0 +1,10 @@
+rules:
+  - id: weak-hash
+    languages: [javascript, typescript]
+    severity: HIGH
+    message: "Слабый хеш MD5/SHA1. CWE-327."
+    metadata:
+      cwe: "CWE-327"
+    pattern-either:
+      - pattern: crypto.createHash("md5")
+      - pattern: crypto.createHash("sha1")
