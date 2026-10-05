@@ -1,9 +1,9 @@
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath (Split-Path -Parent $PSScriptRoot)
 try {
-    $version = '0.4.0'
+    $version = '0.4.1'
     $headVersion = & git show HEAD:app/__init__.py
-    if ($LASTEXITCODE -ne 0 -or ($headVersion -join "`n") -notmatch '__version__ = "0\.4\.0"') { throw 'Commit the reviewed v0.4.0 release first. Packaging uses committed HEAD only.' }
+    if ($LASTEXITCODE -ne 0 -or ($headVersion -join "`n") -notmatch '__version__ = "0\.4\.1"') { throw 'Commit the reviewed v0.4.1 release first. Packaging uses committed HEAD only.' }
     & git diff --quiet HEAD -- .
     if ($LASTEXITCODE -ne 0) { throw 'Commit reviewed tracked changes before packaging. Untracked files are never included.' }
     $tracked = @(& git ls-tree -r --name-only HEAD)

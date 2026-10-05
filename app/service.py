@@ -8,13 +8,14 @@ from pydantic import BaseModel, ConfigDict
 from app.agent.loop import run_agent, run_deterministic
 from app.agent.models import AgentState, Status
 from app.agent.planner import Planner
-from app.agent.reporting import finalize
+from app.agent.reporting import finalize, llm_components
 from app.agent.tools import ToolRegistry
 from app.benchmarks import Benchmark, BenchmarkId, BenchmarkRegistry, Mode
 from app.config import ReportLanguage, ReportTone, Settings
 from app.events import Observer, RunEvent, emit
 from app.llm import OpenAICompatibleClient
 from app.preflight import check_target_reachable
+from app.presentation import run_banner
 from app.runs import RunPaths
 from app.validation import validate_source_path, validate_target_url
 
@@ -101,6 +102,7 @@ class RunService:
             benchmark_id=benchmark.id if benchmark else None,
             benchmark_name=benchmark.name if benchmark else None,
             same_application=bool(benchmark and mode == "full"),
+            llm_enabled=request.llm_enabled,
             benchmark_expected=benchmark.expected_findings if benchmark else None,
             target_url=target,
             source_path=source,
@@ -213,5 +215,34 @@ class RunService:
                 "finish_reason": state.finish_reason,
                 "ai_brief": state.ai_brief.model_dump() if state.ai_brief else None,
                 "ai_brief_status": state.ai_brief_status.value,
+                "llm_enabled": state.llm_enabled,
+                "llm_components": llm_components(state),
+                "enrichment": state.enrichment.model_dump(),
+                "last_error_code": state.last_error_code,
+                "stages": {
+                    name: getattr(state, f"{name}_status").value
+                    for name in ("sast", "dast", "enrichment", "ai_brief", "report")
+                },
+                "ui_banner": run_banner(
+                    {
+                        "status": status,
+                        "total": len(state.findings),
+                        "llm_enabled": state.llm_enabled,
+                        "warnings": state.warnings,
+                        "finish_reason": state.finish_reason,
+                        "enrichment": state.enrichment.model_dump(),
+                        "llm_components": llm_components(state),
+                        "stages": {
+                            name: getattr(state, f"{name}_status").value
+                            for name in (
+                                "sast",
+                                "dast",
+                                "enrichment",
+                                "ai_brief",
+                                "report",
+                            )
+                        },
+                    }
+                ),
             },
         )

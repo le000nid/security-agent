@@ -10,6 +10,7 @@ from typing import Annotated
 from pydantic import Field
 
 from app.models import SEVERITY_ORDER, Finding
+from app.presentation import run_banner
 from app.safe_logging import redact, redact_data
 
 RUN_ID_PATTERN = r"^\d{8}T\d{6}Z-[a-f0-9]{12}$"
@@ -71,6 +72,7 @@ class RunRepository:
                 "run_id": run_id,
                 "benchmark_id": data.get("benchmark_id"),
                 "benchmark_name": data.get("benchmark_name"),
+                "ui_banner": run_banner(data),
             }
         )
 
@@ -78,7 +80,17 @@ class RunRepository:
         if not self.base.is_dir():
             return []
         result = []
-        for path in sorted(self.base.iterdir(), key=lambda p: p.name, reverse=True):
+
+        def order(path: Path):
+            # Run IDs have second precision and a random suffix. Do not mistake
+            # lexical UUID order for chronology when two runs share a second.
+            try:
+                modified = path.stat().st_mtime_ns
+            except OSError:
+                modified = 0
+            return path.name.split("-", 1)[0], modified, path.name
+
+        for path in sorted(self.base.iterdir(), key=order, reverse=True):
             if not re.fullmatch(RUN_ID_PATTERN, path.name):
                 continue
             try:

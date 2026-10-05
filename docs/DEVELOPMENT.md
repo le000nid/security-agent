@@ -1,4 +1,4 @@
-# Development — 0.4.0
+# Development — 0.4.1
 
 Normal users need only Docker. For native development use Python 3.11+:
 
@@ -38,7 +38,7 @@ Linux and macOS, plus Linux multi-architecture builds and a no-LLM lab smoke run
 
 ```text
 docker compose config --quiet
-docker build -t ai-security-agent:0.4.0 .
+docker build -t ai-security-agent:0.4.1 .
 docker buildx build --platform linux/amd64,linux/arm64 --output type=cacheonly .
 ```
 
@@ -58,6 +58,9 @@ Add tests to `test_brief_and_enrichment.py` using mocked compatible HTTP respons
 never use a real provider key or enable doctor --check-llm in automated checks.
 
 ## Add a benchmark (no Chat prompt edits)
+
+See the complete worked [benchmark extension guide](BENCHMARKS.md), including
+Russian metadata, capability restrictions, Compose health and no-LLM validation.
 
 1. Add reviewed source/runtime fixtures under `targets/<id>`. Unsafe examples
    must never execute on startup or HTTP requests. Keep benign controls too.
@@ -95,9 +98,30 @@ with events/barriers, not real scans or provider requests.
 ## Clean release archive
 
 Review and commit changes first, then run `scripts/package.ps1` or
-`scripts/package.sh`. Both require committed HEAD version 0.4.0 and no tracked
+`scripts/package.sh`. Both require committed HEAD version 0.4.1 and no tracked
 diff, check secret-like tracked filenames, and call git archive. `.gitattributes`
 excludes runtime/caches/secrets/ZIPs; untracked files are not archived. Scripts
 refuse to overwrite an existing output. The workflow does not detect credentials
 embedded in ordinary source files: review content before committing. Local build
 does not authorize a commit, push, GitHub release or image publication.
+## v0.4.1 regression seams
+
+Use `test_v041_reliability.py` for budget, trace, usage, brief preservation and
+actual-outcome banner tests. Use `test_v041_chat.py` for selected context, strict
+analyst references, no artifact mutation/scanner execution, connectivity
+classification and one-use confirmation/CSRF/expiry tests. Mock HTTP envelopes,
+not only final prose, when testing transport truncation/accounting. No live
+provider discovery or completion belongs in CI. Preserve existing .env overrides.
+
+`test_chat_recovery.py` covers two-attempt analyst recovery, bounded partial JSON,
+character/point overflow, role isolation, read-only follow-ups and metadata
+contradictions. `tests/chat_ui.cjs` executes the production renderer/handlers in
+a minimal DOM using Node (no npm dependencies); pytest invokes it when Node is
+available, and CI installs Node explicitly. It checks text-only rendering, the
+truncation banner, structured blocks and all five follow-up actions. This is a
+DOM contract test, not a visual browser or live-provider acceptance test.
+
+Russian labels are presentation only. Internal enums/API names stay English;
+registry descriptions drive benchmark cards. Use textContent, not HTML injection.
+Chat output is never passed to ToolRegistry or a subprocess. Rebuild the shared
+agent/UI image after Python or UI asset changes; the UI is packaged into the wheel.

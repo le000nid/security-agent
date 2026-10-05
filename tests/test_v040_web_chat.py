@@ -51,9 +51,9 @@ def test_web_index_health_benchmarks(web):
     client, _, llm = web
     page = client.get("/")
     assert page.status_code == 200
-    assert "Guided Scan" in page.text and "text/html" in page.headers["content-type"]
+    assert "Сканирование" in page.text and "text/html" in page.headers["content-type"]
     assert "frame-ancestors 'none'" in page.headers["content-security-policy"]
-    assert client.get("/healthz").json()["version"] == "0.4.0"
+    assert client.get("/healthz").json()["version"] == "0.4.1"
     assert len(client.get("/api/benchmarks").json()) == 3
     assert client.get("/api/llm").json()["connectivity"] == "unchecked"
     llm.factory.assert_not_called()
@@ -240,7 +240,15 @@ def test_chat_starts_known_scan_and_returns_progress(web):
     client, app, _ = web
     result = client.post("/api/chat", json={"message": "Проверь demo-full полностью"})
     assert result.status_code == 200
-    assert wait_job(app, result.json()["job"]["job_id"]).status == "completed"
+    assert "job" not in result.json()
+    confirmation = client.post(
+        "/api/chat/confirm",
+        json={
+            "proposal_id": result.json()["proposal"]["proposal_id"],
+            "confirm": True,
+        },
+    )
+    assert wait_job(app, confirmation.json()["job"]["job_id"]).status == "completed"
     assert (
         client.post(
             "/api/chat",
@@ -333,10 +341,11 @@ def test_llm_chat_schema_dynamic_metadata_and_failure_latch(web):
     assert "target_url" not in call.args[1] and "source_path" not in call.args[1]
     fake.complete_json.return_value = '{"intent":"START_SCAN","command":"evil"}'
     assert (
-        client.post("/api/chat", json={"message": "untrusted text"}).status_code == 503
+        client.post("/api/chat", json={"message": "untrusted text"}).status_code == 400
     )
     client.post("/api/chat", json={"message": "untrusted again"})
-    assert fake.complete_json.call_count == 2
+    assert fake.complete_json.call_count == 3
+    assert llm.connectivity == "available"
 
 
 def test_html_untrusted_content_is_not_executed(web, service):

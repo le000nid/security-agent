@@ -9,7 +9,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.config import Settings
-from app.llm_output import LLMError, validate_output
+from app.llm_output import ChatResponseTruncated, LLMError, validate_output
 from app.models import Finding, NormalizedCategory, Severity
 from app.safe_logging import redact
 
@@ -229,6 +229,9 @@ class OpenAICompatibleClient:
         self.planner_usage = LLMUsage()
         self.brief_usage = LLMUsage()
         self.chat_usage = LLMUsage()
+        self.chat_analysis_usage = LLMUsage()
+        # Safe envelope metadata only, reset for every logical completion.
+        self.last_response_meta: dict[str, dict] = {}
 
     def usage_for(self, role: str) -> LLMUsage:
         return {
@@ -236,6 +239,7 @@ class OpenAICompatibleClient:
             "enrichment": self.usage,
             "brief": self.brief_usage,
             "chat": self.chat_usage,
+            "chat_analysis": self.chat_analysis_usage,
         }[role]
 
     @property
@@ -263,7 +267,7 @@ class OpenAICompatibleClient:
     ) -> httpx.Response:
         last_error: Exception | None = None
         # Planner retries are owned by the bounded agent loop, not hidden here.
-        retries = 0 if role in ("planner", "chat") else MAX_RETRIES
+        retries = 0 if role in ("planner", "chat", "chat_analysis") else MAX_RETRIES
         for attempt in range(retries + 1):
             try:
                 with httpx.Client(
@@ -361,6 +365,7 @@ class OpenAICompatibleClient:
     def complete_json(
         self, system: str, user: str, *, max_tokens: int, role: str = "enrichment"
     ) -> str:
+        self.last_response_meta[role] = {}
         self.ensure_model_available()
         request_body: dict[str, object] = {
             "model": self.model,
@@ -388,7 +393,19 @@ class OpenAICompatibleClient:
             raise LLMError(role, "schema_validation_error") from None
         usage = self.usage_for(role)
         usage.add_response(payload.get("usage"))
+        reason = choice.get("finish_reason")
+        self.last_response_meta[role] = {
+            "finish_reason": reason if reason in ("stop", "length") else "other",
+            "content_chars": len(content) if isinstance(content, str) else 0,
+            "reasoning_present": bool(
+                message.get("reasoning") or message.get("reasoning_content")
+            ),
+        }
+        if role == "chat_analysis" and message.get("tool_calls"):
+            raise LLMError(role, "schema_validation_error")
         if choice.get("finish_reason") == "length":
+            if role == "chat_analysis" and not message.get("tool_calls"):
+                raise ChatResponseTruncated(content if isinstance(content, str) else "")
             raise LLMError(role, "response_truncated")
         if choice.get("finish_reason") != "stop" or message.get("tool_calls"):
             raise LLMError(role, "schema_validation_error")

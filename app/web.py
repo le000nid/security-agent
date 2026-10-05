@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict
 
 from app import __version__
 from app.benchmarks import BenchmarkId, Mode
-from app.chat import ChatController, ChatLLM, ChatRequest
+from app.chat import ChatController, ChatLLM, ChatRequest, ScanConfirmation
 from app.jobs import JobManager
 from app.repository import RunRepository
 from app.service import RunRequest, RunService
@@ -47,6 +47,12 @@ ERRORS = {
     "benchmark_required",
     "worker_unavailable",
     "unsupported_intent",
+    "chat_response_truncated",
+    "chat_json_invalid",
+    "chat_schema_invalid",
+    "chat_context_mismatch",
+    "chat_internal_error",
+    "proposal_expired",
 }
 
 
@@ -153,7 +159,7 @@ def create_app(
 
     @app.get("/api/benchmarks")
     def benchmarks():
-        return [b.model_dump(mode="json") for b in service.benchmarks.list()]
+        return [b.ui_metadata() for b in service.benchmarks.list()]
 
     @app.get("/api/runs")
     def runs():
@@ -202,5 +208,9 @@ def create_app(
     @app.post("/api/chat")
     def chat_message(request: ChatRequest):
         return chat.handle(request)
+
+    @app.post("/api/chat/confirm")
+    def confirm_scan(request: ScanConfirmation):
+        return chat.confirm(request)
 
     return app

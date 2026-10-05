@@ -41,3 +41,9 @@ not proof of exploitability.
 The sample under `targets/sample-app/` intentionally contains one example for
 each rule. The benchmark only measures whether this curated fixture inventory is
 detected; its precision/recall values do not measure real-world pentest quality.
+## v0.4.1 scope
+
+Scanner rules, commands and the three built-in benchmarks are unchanged. The
+release refines Russian presentation, bounded Planner/brief output and read-only
+Chat analysis, not detection coverage. Chat never selects new scanner flags or
+runs source code. See [BENCHMARKS.md](BENCHMARKS.md) for a reviewed extension example.

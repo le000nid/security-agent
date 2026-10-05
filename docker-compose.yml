@@ -18,7 +18,7 @@ services:
       start_period: 15s
   demo-full:
     build: ./targets/demo-full
-    image: ai-security-demo-full:0.4.0
+    image: ai-security-demo-full:0.4.1
     user: "1000:1000"
     read_only: true
     security_opt: ["no-new-privileges:true"]
@@ -33,7 +33,7 @@ services:
   agent: &agent
     profiles: ["agent"]
     build: .
-    image: ${AGENT_IMAGE:-ai-security-agent:0.4.0}
+    image: ${AGENT_IMAGE:-ai-security-agent:0.4.1}
     user: "${AGENT_UID:-1000}:${AGENT_GID:-1000}"
     security_opt:
       - no-new-privileges:true
@@ -45,12 +45,16 @@ services:
       LLM_BASE_URL: ${LLM_BASE_URL:-}
       AGENT_MAX_STEPS: ${AGENT_MAX_STEPS:-8}
       AGENT_MAX_PLANNER_CALLS: ${AGENT_MAX_PLANNER_CALLS:-8}
+      LLM_PLANNER_MAX_TOKENS: ${LLM_PLANNER_MAX_TOKENS:-320}
+      LLM_PLANNER_RETRY_MAX_TOKENS: ${LLM_PLANNER_RETRY_MAX_TOKENS:-512}
       LLM_ENRICHMENT_BATCH_SIZE: ${LLM_ENRICHMENT_BATCH_SIZE:-1}
       LLM_ENRICHMENT_MAX_TOKENS: ${LLM_ENRICHMENT_MAX_TOKENS:-1200}
       LLM_ENRICHMENT_RETRY_MAX_TOKENS: ${LLM_ENRICHMENT_RETRY_MAX_TOKENS:-2200}
       LLM_BRIEF_ENABLED: ${LLM_BRIEF_ENABLED:-true}
-      LLM_BRIEF_MAX_TOKENS: ${LLM_BRIEF_MAX_TOKENS:-1000}
-      LLM_BRIEF_RETRY_MAX_TOKENS: ${LLM_BRIEF_RETRY_MAX_TOKENS:-1600}
+      LLM_BRIEF_MAX_TOKENS: ${LLM_BRIEF_MAX_TOKENS:-2000}
+      LLM_BRIEF_RETRY_MAX_TOKENS: ${LLM_BRIEF_RETRY_MAX_TOKENS:-3200}
+      LLM_CHAT_MAX_TOKENS: ${LLM_CHAT_MAX_TOKENS:-2400}
+      LLM_CHAT_RETRY_MAX_TOKENS: ${LLM_CHAT_RETRY_MAX_TOKENS:-3600}
       LLM_REPORT_TONE: ${LLM_REPORT_TONE:-professional}
       LLM_REPORT_LANGUAGE: ${LLM_REPORT_LANGUAGE:-ru}
     volumes:

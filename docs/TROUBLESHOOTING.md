@@ -1,4 +1,4 @@
-# Troubleshooting — 0.4.0
+# Troubleshooting — 0.4.1
 
 Start with `scripts/doctor.ps1` (PowerShell) or `scripts/doctor.sh` (Linux/macOS).
 Diagnostic commands below never require printing `.env` or API credentials.
@@ -15,7 +15,7 @@ Use `docker compose config --quiet`; plain config output expands secrets.
 | SAST-only while Juice Shop is offline | This is supported; default doctor and SAST do not require DAST service health. |
 | agent_requires_llm | Enable AI with valid settings, or choose Standard Scan / `scan --no-llm`. |
 | LLM unavailable | Keep using scanner-only Guided Scan and deterministic Chat quick actions. Optional discovery is `doctor --check-llm`. |
-| Chat free-form unavailable | Click Check LLM explicitly after restoring provider access; failed parsing latches unavailable to avoid outage loops. Quick actions still work. |
+| Chat free-form unavailable | Click «Проверить подключение к LLM» after restoring provider access. Only transport/discovery failures latch unavailable; content errors do not. Quick actions still work. |
 | scan_already_running | Wait for the active UI job; only one is allowed. Use Runs to inspect previous artifacts. |
 | Stale job after restart | Job handles are in memory, not durable. Refresh Runs; inspect `runs/<id>/reports/summary.json` and `agent_trace.json`. An interrupted run may have only partial logs. |
 | csrf_failed | Reload the page after a UI restart; the per-process token changed. Use the same localhost/127.0.0.1 origin, not a public reverse proxy. |
@@ -36,7 +36,7 @@ Never paste `.env` or resolved Compose secrets into an issue.
 | PowerShell scripts blocked | For this terminal only, if permitted by your organization's policy: `Set-ExecutionPolicy -Scope Process Bypass`; rerun bootstrap. |
 | Juice Shop unhealthy | `docker compose ps -a juice-shop`, `docker compose logs --tail 80 juice-shop`; healthcheck uses `/nodejs/bin/node`, not PATH lookup. Retry `docker compose up -d --wait --wait-timeout 180 juice-shop`. |
 | Port 3000 already in use | Stop the other application/container, or change only the host side of the Compose port mapping. Container target stays `http://juice-shop:3000`. |
-| Wrong architecture / exec format error | Inspect `docker image inspect ai-security-agent:0.4.0 --format '{{.Os}}/{{.Architecture}}'` and `docker info --format '{{.Architecture}}'`; rebuild for the host architecture. |
+| Wrong architecture / exec format error | Inspect `docker image inspect ai-security-agent:0.4.1 --format '{{.Os}}/{{.Architecture}}'` and `docker info --format '{{.Architecture}}'`; rebuild for the host architecture. |
 | Apple Silicon image issue | Use arm64 release/build; remove manual amd64 platform overrides. Check `docker buildx ls`. Both scanners must pass image build version checks. |
 | CRLF shell failure | Restore LF line endings with Git `.gitattributes`; a fresh clone honors them. Shell scripts need executable permissions (`chmod +x run.sh scripts/*.sh`). |
 | Bind mount permission denied | Linux wrappers use your UID/GID. Ensure your account owns `runs`, `logs`, `reports`; set AGENT_UID/AGENT_GID only if needed. Do not run scans as unrestricted root. Docker Desktop may require sharing the repository folder. |
@@ -60,7 +60,7 @@ Never paste `.env` or resolved Compose secrets into an issue.
 Doctor's default mode makes no LLM requests. `--check-llm` explicitly opts into
 discovery only; do not use it in automated offline validation.
 
-## Enrichment and brief warnings (v0.3.2)
+## Enrichment and brief warnings
 
 - Use LLM_ENRICHMENT_BATCH_SIZE=1; bootstrap preserves existing .env, so an old
   value of 3 is not automatically replaced. Larger batches are experimental.
@@ -70,11 +70,39 @@ discovery only; do not use it in automated offline validation.
 - completed_with_warnings is not a scanner failure: successful changes remain,
   stage status shows partial enrichment, and ai_brief_status independently shows
   synthesis availability. Check both statuses even when process exit is 0.
-- Brief truncation gets one retry (1000 → 1600 by default). Unknown/duplicate IDs
-  or schema failures reject the brief without affecting scanner/enrichment results.
+- Brief truncation gets one retry (2000 → 3200 by default). Unknown/duplicate IDs
+  or JSON/schema failures get one terminal schema repair using safe diagnostics
+  and compact source data. At most three logical attempts; no loop after repair.
+  Inspect `summary.llm_components.brief.attempts` or UI safe Brief diagnostics.
+  Persisting failure rejects the brief without affecting scanner/enrichment results.
   ai_brief.json is then a small status object; report.md still exists.
-- Budget values must be 256–8192 and retry budgets strictly larger than normal.
+- Enrichment/brief budgets must be 256–8192; Planner budgets 256–2048 and retry budgets strictly larger than normal.
   Invalid tone/language settings are rejected; use professional/concise/funny and
   ru/en. Tone affects the brief only. LLM_BRIEF_ENABLED=false disables synthesis.
 - In Windows PowerShell use Get-Content -Encoding UTF8 for Russian ai_brief.json.
   Reports themselves are UTF-8. Do not print .env or unredacted provider bodies.
+## v0.4.1 Planner / Chat diagnostics
+
+| Symptom | Recovery |
+| --- | --- |
+| planner_response_truncated | Default budgets are 320, then 512 only after truncation. Check old .env overrides, request count and trace. Existing loop limits still apply; no hidden retries. |
+| brief_response_truncated | Default 2000 then 3200, one content retry. Update old .env 1000/1600 overrides manually. Successful enrichment/scanner findings survive; read llm_components.brief separately. |
+| Chat says unchecked after a successful scan | The indicator describes the separate chat client, not the historical scan. Explicitly check connectivity. No automatic discovery runs on page load. |
+| chat_json_invalid / chat_schema_invalid | Invalid complete output is rejected safely; provider connectivity remains available. No provider text is stored in run artifacts. |
+| chat_response_truncated | Analyst makes one concise retry (LLM_CHAT_MAX_TOKENS=2400, LLM_CHAT_RETRY_MAX_TOKENS=3600). Useful partial text survives with a warning and continuation/compression/facts/manual-check buttons. No raw JSON or reasoning is displayed. Intent parser does not retry. |
+| Partial reply followed by a provider outage | Available text is still shown. Check connectivity explicitly before using follow-ups; offline saved-result actions continue to work. |
+| Wrong run discussed | Use «Текущий запуск» / «Сменить / обновить запуск», or «Обсудить этот запуск» on results. Clear the selected finding to discuss the whole run. |
+| proposal_expired | Confirmation is one-use and expires after five minutes or UI restart. Ask for a fresh proposal; never resend modified target parameters. |
+| Agent proposal cannot confirm | Check Chat LLM connectivity explicitly. Even then, RunService rechecks provider availability when the job starts. |
+| Completed with warnings | Inspect each llm_components entry. A brief error is not a scanner failure or proof that AI was disabled. |
+| Docker permission denied on Linux | Follow local Docker group/rootless policy and ensure the daemon is running. Never chmod 777 the socket. |
+
+After changing .env recreate UI through `run.ps1 ui` / `run.sh ui`; bootstrap does
+not overwrite your settings. Do not paste keys or expanded Compose config into logs.
+
+After changing **code**, `run.ps1 ui` alone does not force an existing image to
+rebuild. Use `docker compose --profile ui build ui` followed by
+`docker compose --profile ui up -d --no-deps --force-recreate --wait ui`, then reload
+the browser page (including its CSRF token). Normal build caching is safe and
+remains enabled. Do not recreate UI during an active scan/chat request.
+See [evidence and manual provider checks](LLM_RELIABILITY.md).

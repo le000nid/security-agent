@@ -1,8 +1,8 @@
-# AI Security Agent 0.4.0
+# AI Security Agent 0.4.1
 
 A local educational AI-assisted application security analysis platform.
 Semgrep analyzes source code; Nuclei performs reviewed, low-impact HTTP checks.
-Use the CLI or the local Web UI. AI is optional: the complete scanner-only demo
+Use the CLI or the local Web UI. The primary Web UI is in Russian; this guide is in English. AI is optional: the complete scanner-only demo
 works without a provider account or Internet access once images are available.
 
 This is a training harness, not an autonomous pentester or security certification.
@@ -55,7 +55,8 @@ socket world-writable.
 
 ## Quick start — Windows PowerShell
 
-Start Docker Desktop, then:
+On Windows 10/11 x64 install Git and Docker Desktop, select Linux containers,
+and wait for the Docker engine to be running. Open PowerShell in your projects folder:
 
 ```powershell
 git clone https://github.com/le000nid/security-agent.git
@@ -73,9 +74,21 @@ Lab browser addresses: [Juice Shop](http://127.0.0.1:3000) and
 [Demo Full](http://127.0.0.1:3001).
 
 If PowerShell script execution is blocked, follow your organization's policy.
-A process-scoped execution-policy exception is preferable to permanent changes.
+If policy permits, use only a process-scoped exception in this terminal:
 
-## Quick start — Linux / macOS
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\scripts\bootstrap.ps1
+```
+
+Do not change machine-wide policy.
+
+## Quick start — Linux
+
+Install Git, Docker Engine and the Compose v2 plugin using your distribution's
+supported installation procedure. Start Docker and ensure your account is allowed
+to use it (`docker info`, `docker compose version`). Docker-group membership is
+privileged; follow local policy. Never use `chmod 777 /var/run/docker.sock`.
 
 ```bash
 git clone https://github.com/le000nid/security-agent.git
@@ -88,6 +101,26 @@ cd security-agent
 ./run.sh ui
 ```
 
+## Quick start — macOS (Intel and Apple Silicon)
+
+Install Git (for example via Command Line Tools) and Docker Desktop for your Mac's
+architecture. Start Docker Desktop and wait for its engine. In Terminal:
+
+```bash
+git clone https://github.com/le000nid/security-agent.git
+cd security-agent
+./scripts/bootstrap.sh
+./scripts/doctor.sh
+./run.sh ui
+```
+
+Open [the local UI](http://127.0.0.1:8080), then follow the no-LLM demo below.
+Do not force amd64 on Apple Silicon unless deliberately testing emulation.
+The project retains amd64/arm64 build support and macOS CI, but this patch does
+not claim physical macOS/Apple Silicon validation.
+
+## What bootstrap and UI startup do
+
 Bootstrap preserves an existing `.env`, otherwise copies `.env.example`;
 creates runs/logs/reports; validates Docker; builds the agent or pulls
 `AGENT_IMAGE`; starts Juice Shop and Demo Full; waits for health; runs all
@@ -99,12 +132,13 @@ process itself has no Docker socket and never starts containers. Stop only the
 UI with `docker compose --profile ui stop ui`. To stop the whole lab:
 `docker compose --profile ui --profile agent down` (reports remain on the host).
 
-## Guided Scan walkthrough
+## First demo without LLM — Russian UI walkthrough
 
-1. Select **Demo Full**, scope **FULL**.
-2. Choose **Standard Scan**, leave **Enable AI** unchecked.
-3. Click **Start Analysis** and follow stage progress.
-4. Open results: severity counts, stages, warnings, curated baseline, findings.
+1. Open **Сканирование**, select **Demo Full**, **Тип анализа: FULL**.
+2. Choose **Обычное сканирование**, leave **Использовать ИИ** unchecked.
+3. Click **Запустить анализ** and follow **Ход анализа**.
+4. Open **Открыть результаты**: expect four SAST + three DAST findings, baseline
+   detected 7/7, no missed/unexpected findings, and AI stages skipped.
 5. Filter findings by severity/source/category; open one for evidence,
    description and recommendation. Read/download the plain-text Markdown report.
 
@@ -112,7 +146,7 @@ AI Agent is disabled until AI is enabled. Tone professional/concise/funny and
 language ru/en apply to the brief, not scanner evidence. Evidence transmission
 is a separate opt-in. A failed provider must not erase scanner results.
 
-**Runs** reads persisted reports (including v0.3 runs), newest first, at most
+**История запусков** reads persisted reports (including v0.3 runs), newest first, at most
 500 entries. Malformed histories are skipped. It is not a database.
 One UI scan job is allowed at a time; a second start returns
 `scan_already_running`. The last 50 jobs and 100 events/job are in memory.
@@ -120,35 +154,110 @@ A UI restart loses job handles; check Runs for surviving reports. Do not restart
 during a scan: background work is not a durable queue. Separate CLI processes
 are not governed by the UI's in-process lock.
 
-## Chat: fixed operations, not a shell
+## Chat: discuss a saved run, or propose a controlled scan
 
-Quick actions work without an LLM: Help, Benchmarks, Latest run, Findings, High
-findings, Report, Summary. Supported deterministic phrases include:
+**ИИ-помощник** has two distinct purposes:
 
-- “Какие стенды доступны?”
-- “Проверь demo-full полностью” — starts Standard Scan FULL, AI off.
-- “Покажи high”
-- “Какая находка самая серьёзная?” — explains the highest-ranked stored finding.
-- “Покажи последний отчёт”
+1. Analyze existing results. Select **Текущий запуск** (latest readable run by
+   default) and optionally **Находка**. **Обсудить этот запуск** on run detail and
+   **Объяснить в ИИ-помощнике** on finding detail select those exact IDs.
+2. Propose a new registered-benchmark scan. No scan starts before a separate
+   **Запустить** confirmation. **Отмена** discards it. Proposals expire after
+   five minutes, are one-use, and disappear when the UI restarts.
 
-“Explain this finding in Chat” supplies the selected run/finding ID.
-Unqualified “Объясни эту находку” falls back to the highest-severity finding
-of the latest readable run. It does not infer a hidden conversational selection.
-Explanations reuse stored descriptions/recommendations/rationale. Summaries reuse
-the saved brief or deterministic counts. Neither action reruns scanners.
+Useful Russian questions:
 
-Free-form parsing requires an explicit successful **Check LLM connectivity**.
-This button performs model discovery only. A failed parse/check latches
-unavailable until another explicit check; no repeated provider outage loop.
-Only the current message plus compact registry/latest-run metadata are sent.
-Chat history is limited to 30 displayed messages in the tab, not persisted in
-reports and never fed to the Planner.
+- “Что здесь плохого и что исправлять первым?”
+- “Что здесь хорошего?”
+- “Есть ли реально опасные проблемы?”
+- “Сравни результаты SAST и DAST.”
+- “Дай план исправления на 5 шагов.”
+- “Объясни эту находку.” / “Почему это high?”
+- “Какие находки могут быть false positive?”
+- “Какие утверждения точно подтверждены сканерами, а какие являются предположениями?”
+- “Назови три приоритета исправления и необходимые ручные проверки.”
 
-Chat's strict intent enum is HELP, LIST_BENCHMARKS, START_SCAN, SHOW_LATEST_RUN,
-SHOW_RUN, SHOW_FINDINGS, SHOW_REPORT, EXPLAIN_FINDING, SUMMARIZE_RUN.
-Extra commands, URLs, paths, services and scanner arguments are rejected.
-Chat is a controller above RunService; Planner selects approved actions *within*
-a run. Neither role can expand the target allowlist or execute arbitrary shell.
+The read-only Chat Run Analyst uses only a compact projection of stored findings.
+It cannot create Finding objects, change targets or run tools/scanners. Replies
+normally use strict Pydantic-validated JSON with a short `summary`,
+`confirmed_points`, `assumptions_or_manual_checks` and `remediation_priorities`.
+The UI renders these as **Подтверждено сканерами**, **Требует ручной проверки** and
+**Почему это важно / приоритеты исправления**, plus existing-finding links,
+caveats and suggested questions. Unknown/duplicate IDs are rejected. Observations,
+interpretations and uncertainty must be distinguished; positive run coverage is
+not proof that the application is secure. A scanner pattern is not proof of
+exploitability: risks are conditional on input reachability and manual validation.
+Stored severity and enrichment stage status are also displayed independently of
+AI prose. Narrow contradiction guards correct unsupported CRITICAL claims and
+claims that completed enrichment was absent; these are not a general fact checker.
+
+Local shortcuts work without an LLM: “Покажи HIGH”, “Сколько нашёл SAST?”,
+“Покажи результаты DAST”, “Где отчёт?”, “Какие стенды доступны?”.
+An offline analytical question returns the selected/highest-severity stored
+finding, description, recommendation and saved rationale with a clear limitation.
+
+“Проверь demo-full полностью” proposes FULL / ordinary scan / AI off.
+“Проверь demo-full полностью агентом” proposes FULL / agent / AI on.
+These exact known-registry phrases need no intent-parser request.
+Neither URLs nor source paths can be passed through chat.
+
+Click **Проверить подключение к LLM** to explicitly check model discovery before
+free-form AI analysis. This chat health indicator is separate from a scan's actual
+component outcomes; successful CLI/Guided Scan use does not mark a newly created
+chat client checked. RunService always performs its own authoritative preflight.
+Transport/authentication/discovery failure latches unavailable until an explicit
+check. Invalid JSON and schema failures report safe content errors without
+changing available connectivity. The intent parser still has no automatic retry.
+If classification fails with a content error and a saved run exists, the controller
+falls back to read-only Analyst, never to a scan proposal. This prevents an intent
+parser truncation (600-token budget) from bypassing analyst recovery entirely.
+
+### Long Chat Analyst answers
+
+Only the **Chat Run Analyst** makes one concise retry on provider truncation
+(`finish_reason=length`) or an otherwise valid answer exceeding output limits.
+Independent environment settings (also forwarded by Compose) are:
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `LLM_CHAT_MAX_TOKENS` | `2400` | Initial analyst completion budget |
+| `LLM_CHAT_RETRY_MAX_TOKENS` | `3600` | Single concise-retry budget |
+
+Both accept 256–8192; retry must exceed the initial budget. They do not change
+Planner, enrichment or brief budgets. Existing `.env` files are not overwritten.
+Rebuild the image after code changes; recreate UI after environment changes.
+
+Useful partial text is retained even when the retry also truncates or fails.
+The API returns `analysis.status=completed_with_warnings`, `truncated=true` and
+`error_code=chat_response_truncated`, not an empty error placeholder. The UI shows
+**Ответ сокращён из-за ограничения длины. Показана первая часть.** above the
+available text and offers **Продолжить**, **Сжать ответ**, **Разобрать по одной
+находке**, **Только подтверждённые факты**, and **Только то, что требует ручной
+проверки**. A successful concise retry is shown normally; the first partial
+remains available in an expandable block. If neither attempt contains readable
+answer text, the fallback shows stored observations with an explicit warning.
+
+Partial JSON recovery extracts only bounded display fields, never reasoning,
+tool calls or a raw envelope. An incomplete answer is not a fully validated
+conclusion; finding-reference links are omitted until a complete reply validates.
+No partial answer is written to scan reports/logs or used as tool input.
+
+Only the current question and explicit run/finding context are sent, not general
+chat history. Explicit follow-up buttons additionally send at most 2400 characters
+of the displayed answer as untrusted, ephemeral context for the same run/finding;
+they cannot start a scan. The analyst receives at most 50 severity-ranked findings (selected
+finding first), with title <=120 and description/recommendation/rationale <=180
+characters. No raw logs, source code, locations, evidence or environment are sent.
+Structured answers have summary <=350 characters and at most seven points total,
+each <=180 (at most four per block). The legacy answer <=1800 remains supported.
+There are <=7 unique supplied finding IDs and <=4 caveats/questions each.
+Input coverage counts disclose truncation of the projection.
+Chat intent parsing and analysis have separate in-memory usage counters, outside
+scan summaries. The last 30 displayed messages remain only in the browser tab.
+
+The closed intent set adds ANALYZE_RUN, PRIORITIZE_FINDINGS, REMEDIATION_PLAN and
+COMPARE_SAST_DAST; EXPLAIN_FINDING and SUMMARIZE_RUN now use the analyst when
+available. Planner remains a different role inside the controlled scan loop.
 
 ## LLM unavailable / offline demo
 
@@ -182,19 +291,24 @@ LLM_MODEL=deepseek-ai/DeepSeek-V4-Flash-0731
 LLM_API_KEY=replace_me
 AGENT_MAX_STEPS=8
 AGENT_MAX_PLANNER_CALLS=8
+LLM_PLANNER_MAX_TOKENS=320
+LLM_PLANNER_RETRY_MAX_TOKENS=512
 LLM_ENRICHMENT_BATCH_SIZE=1
 LLM_ENRICHMENT_MAX_TOKENS=1200
 LLM_ENRICHMENT_RETRY_MAX_TOKENS=2200
 LLM_BRIEF_ENABLED=true
-LLM_BRIEF_MAX_TOKENS=1000
-LLM_BRIEF_RETRY_MAX_TOKENS=1600
-LLM_REPORT_TONE=professional
+LLM_BRIEF_MAX_TOKENS=2000
+LLM_BRIEF_RETRY_MAX_TOKENS=3200
+LLM_REPORT_TONE=funny
 LLM_REPORT_LANGUAGE=ru
 ```
 
 Never commit `.env`, paste an API key into Git, or print resolved Compose
 configuration containing secrets. Use `docker compose config --quiet`.
-Bootstrap preserves your existing settings, including an older batch size. Set
+Bootstrap preserves your existing settings, including older token budgets. When
+upgrading, explicitly update the Planner and brief values above in your local
+.env; otherwise old 1000/1600 brief overrides will still take effect. Recreate
+the UI after editing .env (`.\run.ps1 ui` or `./run.sh ui`). Set
 `LLM_ENRICHMENT_BATCH_SIZE=1` explicitly when upgrading: this is the safe default
 in code, Compose and .env.example. An HTTPS base URL is required; do not
 append `/models` or `/chat/completions`. The exact model ID must be available
@@ -240,9 +354,19 @@ failed when none succeeds, or skipped when disabled/no findings exist.
 Model-output failures do not fail otherwise successful scanner/report stages:
 the overall status becomes completed_with_warnings and exit code remains 0.
 
-All token budgets must be 256–8192; each retry budget must exceed its normal
-budget. The current compatible client sends `max_tokens`, not a speculative
+Planner budgets must be 256–2048; enrichment and brief budgets 256–8192.
+Each retry budget must strictly exceed its normal budget. The current compatible client sends `max_tokens`, not a speculative
 provider-specific parameter. No provider reasoning is sent back on retries.
+
+### Planner truncation recovery
+
+The first Planner request uses LLM_PLANNER_MAX_TOKENS (320). Only if the immediately
+preceding decision was rejected as planner_response_truncated does the next
+request use LLM_PLANNER_RETRY_MAX_TOKENS (512). Other content errors do not raise
+the budget. The existing AGENT_MAX_PLANNER_CALLS and three-consecutive-rejections
+limits still apply; there are no hidden transport retries. Short reasoning is
+requested as one concise sentence, not chain-of-thought. A normal FULL run should
+need one Planner request; single-option stages make none.
 
 ## AI Security Brief
 
@@ -254,6 +378,8 @@ These roles are separate:
 | Finding enrichment | Explains each existing finding in technical terms |
 | AI Security Brief | Summarizes the whole run for the human reader |
 | Planner | Chooses between multiple currently permitted actions |
+| Chat Intent Parser | Classifies the current UI request into a fixed intent |
+| Chat Run Analyst | Discusses stored results without mutating or executing anything |
 
 ```text
 Semgrep / Nuclei
@@ -278,8 +404,12 @@ The input contains stage/counter metadata and compact normalized IDs, titles,
 sources, severities, categories and short descriptions—not paths, URLs, raw
 references, source files, evidence, HTTP bodies or environment values.
 
-Strict output validation limits the headline, summary, up to five existing
-finding references, up to five next steps, limitations and closing line.
+Descriptions in its input are capped at 120 characters. Output limits are headline
+100, overall summary 450, finding explanation 180, each next step 180,
+limitations 300 and closing line 160 characters.
+
+Strict output validation limits the headline, summary, up to three existing
+finding references, up to four next steps, limitations and closing line.
 Unknown and duplicate IDs are rejected. The brief is prompted not to invent
 vulnerabilities, claim unobserved exploitation or treat zero findings as proof
 of security. It receives trusted same-application metadata for demo-full, and warns about unverified correspondence for legacy direct inputs. Prose accuracy still requires human review.
@@ -290,10 +420,24 @@ fails, successful enrichment and all scanner findings remain; the ordinary repor
 is generated with a warning. `ai_brief.json` then contains a small status object
 such as `{"status":"failed"}` or `{"status":"skipped"}`, never raw model output.
 
-The brief has its own 1000-token budget and at most one truncation retry at 1600
-tokens. Usage is separate: `llm_usage.planner`, `enrichment`, `brief`, `total`.
+The brief has its own 2000-token budget and at most one truncation retry at 3200
+tokens with a stricter concise prompt. Completed JSON/schema-invalid output gets
+one fresh schema-repair attempt, also at 3200, using compact original data and
+safe field/type diagnostics, not raw provider text. Maximum: **three logical
+attempts** (normal → concise retry → schema repair). Repair is terminal even if
+it truncates; repeated truncation stops after two attempts. Transport retries
+remain separately bounded (up to two retries per logical attempt).
+Usage counts actual HTTP requests: `llm_usage.planner`, `enrichment`, `brief`, `total`.
+`summary.json → llm_components.brief.attempts` retains budgets, safe error codes,
+validation field/types, finish_reason, content length and a reasoning-present
+boolean. Unknown field names become `<unknown>`; no values, raw text or reasoning
+are saved. The UI shows these under **Безопасная диагностика AI Brief**.
+The schema stays small: headline, overall_summary, at most three top findings,
+four steps, limitations and closing_line.
 Set `LLM_BRIEF_ENABLED=false` to disable synthesis without disabling enrichment.
 `--no-llm` skips both and makes **zero** LLM requests.
+
+See [LLM reliability diagnosis and Windows live-test commands](docs/LLM_RELIABILITY.md).
 
 ### Tone and language (brief only)
 
@@ -378,6 +522,12 @@ chain-of-thought. AI brief is a validated object or a small skipped/failed statu
 `latest.json` points to the most recently started run. UI history reads summaries
 independently, including legacy runs with no benchmark metadata.
 
+For independent AI outcomes read `llm_components.planner` (status/requests/failures),
+`llm_components.enrichment` (requested/completed/failed) and `llm_components.brief`
+(status/error_code). The legacy `llm_status` remains for older consumers.
+A completed enrichment does not imply a successful brief. The Russian UI banner
+uses actual stage outcomes and reports optional failures without claiming AI was off.
+
 Report existence is not proof of success. Read summary.status and all stages:
 completed; completed_with_warnings (optional AI failed); or failed (partial work).
 Exit codes remain 0 success/warnings, 2 invalid input, 3 scanner failure,
@@ -425,15 +575,36 @@ only `--check-benchmarks` probes registered HTTP targets, and only
 `--check-llm` contacts the provider.
 
 After reviewing and committing the release, `scripts/package.ps1` or
-`scripts/package.sh` creates `dist/security-agent-v0.4.0.zip` using git archive
+`scripts/package.sh` creates `dist/security-agent-v0.4.1.zip` using git archive
 of clean committed HEAD. Untracked files are never included; tracked secret-like
 filenames cause failure. Export rules exclude runtime directories, .env, caches
 and archives. Scripts refuse to overwrite an existing release archive.
 This is not a secret-content scanner: review committed text before release.
 Do not commit credentials just to make packaging succeed.
 
-See [architecture](docs/ARCHITECTURE.md), [development](docs/DEVELOPMENT.md),
+See the worked [benchmark extension guide](docs/BENCHMARKS.md), [architecture](docs/ARCHITECTURE.md), [development](docs/DEVELOPMENT.md),
 [troubleshooting](docs/TROUBLESHOOTING.md), [rules/tools](docs/tools.md) and
 [validation record](docs/VALIDATION.md). Optional
-`AGENT_IMAGE=ghcr.io/owner/repository:0.4.0` selects your published image;
+`AGENT_IMAGE=ghcr.io/owner/repository:0.4.1` selects your published image;
 otherwise bootstrap builds locally.
+## Manual Windows real-provider acceptance (not automated)
+
+Review the safe .env example above and set your own key locally. Do not print it.
+With Docker running and no scan in progress:
+
+```powershell
+.\scripts\bootstrap.ps1
+.\scripts\doctor.ps1
+.\run.ps1 scan --benchmark demo-full --mode full --no-llm
+.\scripts\doctor.ps1 --check-llm
+.\run.ps1 agent --benchmark demo-full --mode full
+.\run.ps1 latest
+.\run.ps1 ui
+```
+
+Expected scanner baseline is 4 SAST + 3 DAST, 7/7. With a successful provider,
+expect all stages completed, enrichment 7/7 and a concise Russian brief in the
+selected tone; ideally Planner requests=1 and failures=0. Content/provider
+failures remain possible and must be reported honestly. In the browser select
+that run, press **Обсудить этот запуск**, explicitly check Chat connectivity,
+and ask “Что здесь плохого и что исправлять первым?”. No scanner should rerun.

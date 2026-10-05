@@ -1,4 +1,209 @@
-# v0.4.0 application validation
+# v0.4.1 validation and engineering report
+
+## Brief + Chat diagnostic reliability patch (2026-10-05)
+
+- Windows: **488 passed**; Linux Python 3.11 image: **485 passed, 3 skipped**
+  (Git absent for two packaging tests, Node absent for one UI contract test).
+- Ruff check, Ruff format --check, JavaScript syntax and git diff --check pass.
+- Compose config --quiet, cached image build and recreated UI healthcheck pass.
+  UI health HTTP 200; deployed Brief/Chat/client/UI hashes match the workspace.
+  Effective budgets: Brief 2000/3200, Chat 2400/3600.
+- Real local `demo-full FULL --no-llm`: **4 SAST + 3 DAST**, baseline **7/7**,
+  no misses/unexpected findings, **zero LLM requests**. Independent verify_run passes.
+  Artifacts: `runs/20261005T115707Z-165f64a7e047/`; latest pointer now selects this
+  offline smoke. Earlier live runs and local .env were preserved.
+- Real DeepSeek discovery/completion was **not** invoked. Tests mock provider
+  envelopes. Existing FastAPI TestClient deprecation warning remains.
+
+21 new regressions cover bounded Brief repair, terminal failure/report survival,
+token accounting, safe diagnostics, extractor ambiguity, and the previously
+untested Intent Parser → Analyst boundary. The exact user-reported Russian
+claim contradictions have dedicated checks. Existing UI DOM tests still pass.
+
+See [engineering diagnosis, changed files and exact live-test commands](LLM_RELIABILITY.md).
+The following sections record earlier verification, not the latest patch results.
+
+## Chat Analyst focused bugfix verification (2026-10-05)
+
+Version remains 0.4.1. RunService, Planner, scanner arguments, local-only target
+validation and the scan-confirmation boundary are unchanged by this patch.
+
+- Windows Python: **467 passed** (31 added regression cases).
+- Rebuilt Linux Python 3.11 agent image: **464 passed, 3 skipped** (two packaging
+  tests require Git; the Node UI contract test requires Node, absent in runtime).
+- Ruff check and format --check: pass, 69 Python files, Windows and Linux.
+- `node --check app/ui/static/app.js`: pass. The production Chat renderer and all
+  five follow-up handlers pass a minimal-DOM test on Windows; CI installs Node.
+- Compose config and linux/amd64 image build: pass; version stays 0.4.1.
+- Local UI recreated successfully: healthy, `/healthz` HTTP 200, updated partial
+  rendering/follow-up assets served, effective chat budgets 2400/3600. No LLM check.
+- Existing FastAPI TestClient/httpx deprecation warning remains; no test failures.
+- No real provider discovery/completion, scanner run or visual-browser acceptance
+  was performed for this patch. Provider responses are mocked, including malformed
+  JSON, token/character/point limits, repeated truncation and retry transport failure.
+
+Architecture delta: a chat-only transient truncation exception preserves redacted
+content; the analyst owns one concise retry with independent 2400/3600 defaults.
+Strict complete responses and isolated partial-display recovery stay separate.
+Structured blocks, authoritative metadata, warning status and fixed read-only
+follow-ups are additive; no response can become a tool/subprocess argument.
+Saved run bytes are checked unchanged by regression tests. Environment overrides
+and existing artifacts are preserved. Prompt/contradiction guards improve wording
+but do not constitute a general semantic validator of arbitrary model claims.
+
+The earlier release verification below is historical evidence, not a claim that
+all those live scans/browser exercises were repeated for this focused patch.
+
+Validated on 2026-10-05 on Windows / Docker Desktop Linux amd64.
+No real DeepSeek/NSU discovery or completion was performed. The user's reported
+v0.4.0 provider truncations are accepted as motivating evidence, not relabeled
+as successful v0.4.1 live-provider validation. Existing .env and runs are preserved.
+
+## Verification results
+
+| Check | Result |
+| --- | --- |
+| Windows Python 3.12 pytest | 436 passed |
+| Linux Python 3.11 pytest in final agent image | 434 passed, 2 packaging tests skipped (Git absent from runtime image) |
+| Ruff check / format --check | Passed on Windows and Linux; 68 Python files |
+| JavaScript syntax | node --check app/ui/static/app.js passed |
+| PowerShell / Bash packaging syntax | Passed |
+| Compose config --quiet | Passed without printing expanded secrets |
+| Agent/UI and demo-full images | Built as v0.4.1, linux/amd64 |
+| Local services | Juice Shop, demo-full and final UI healthy, loopback ports only |
+| UI version / health | 0.4.1 visible; Docker HTTP /healthz probe passes |
+| CLI demo-full FULL --no-llm | 4 SAST + 3 DAST, expected/detected 7/7, no missed/unexpected |
+| Guided Scan browser smoke | Completed real FULL job, correct Russian banner and component statuses |
+| Chat browser smoke | Exact selected run/finding, offline fallback, proposal then explicit confirmation |
+| Chat-confirmed FULL | 4 SAST + 3 DAST; benchmark.verify_run accepted, zero LLM requests |
+| Browser console | No captured JavaScript errors |
+| UI after restart | History readable, latest context selected; LLM remains unchecked |
+| Version search | Current references updated; prior versions retained only as historical context |
+| Real provider | Not tested by the agent; manual instructions below |
+
+Local evidence:
+
+- CLI FULL: `runs/20261005T101947Z-2c0d707850b3/`.
+- Guided Scan FULL: `runs/20261005T102122Z-0edb2070b419/`.
+- Chat-confirmed FULL: `runs/20261005T102238Z-dfe49bf7beb0/`.
+- Browser proof: `.validation/v041-ui-benchmarks.jpg` (ignored local QA artifact).
+- All smoke runs preserved normalized findings, summary, report, trace, brief status
+  and raw logs; enrichment/brief skipped and all LLM counters zero.
+
+## Engineering changes
+
+1. **Version:** 0.4.1 in app, package, Compose/CI images and release scripts.
+2. **Russian UI:** navigation, forms, help, progress, result/trace/status labels,
+   safe errors, Chat context and confirmation. Technical IDs/enums remain intact.
+3. **Benchmark UX:** description_ru in registry; source/HTTP/capabilities and
+   baseline existence/count on cards. No new benchmarks or per-ID Russian JS.
+4. **Planner:** default 320 tokens, 512 only after the immediately preceding
+   planner_response_truncated rejection. Bounds 256–2048; retry > normal.
+   Existing loop limits/trace/counters and deterministic single-option actions remain.
+5. **Brief:** defaults 2000/3200; input description <=120, output at most three
+   finding references/four steps and smaller bounded text. One truncation retry;
+   failure preserves enrichment, findings and ordinary report. Humor stays brief-only.
+6. **Banners:** actual stage outcomes, not a generic AI-off sentence. Switching
+   views clears prior job notifications so they cannot describe another run.
+7. **Components:** llm_components independently reports Planner status/requests/
+   failures, enrichment requested/completed/failed, brief status/error_code.
+   Legacy llm_status remains supported.
+8. **Run context:** explicit validated run_id/finding_id in requests. Latest
+   readable run fallback, visible selectors and detail-to-chat navigation.
+   Same-second histories no longer sort chronologically by a random ID suffix.
+9. **Analyst:** separate read-only role and strict ChatAnalysisResponse;
+   ANALYZE_RUN, PRIORITIZE_FINDINGS, REMEDIATION_PLAN, COMPARE_SAST_DAST,
+   EXPLAIN_FINDING and SUMMARIZE_RUN use stored results. Unique provided IDs only;
+   no Finding creation, artifact writes, scanner reruns or arbitrary tools.
+10. **Connectivity:** transport/discovery errors latch unavailable; truncation/
+    JSON/schema errors retain available. No attempted connection stays unchecked.
+    Explicit model discovery button remains; scan preflight is authoritative.
+11. **Scan confirmation:** server-side one-use proposals (five-minute TTL, cap 50),
+    separate CSRF-protected confirmation contract, explicit cancel. Only reviewed
+    benchmark scopes can become RunRequest.
+12. **README:** English instructions from zero for Windows, Linux, macOS; Russian
+    UI walkthrough, offline demo, safe LLM configuration and manual acceptance.
+13. **Documentation:** updated architecture/development/troubleshooting/tools;
+    new BENCHMARKS.md with worked 11-step extension procedure.
+14. **Version cleanup:** fixed stale AGENT_IMAGE example; historical validation
+    below is clearly labeled. No user .env settings were silently migrated.
+15. **Files:** new app/chat_analysis.py, app/presentation.py, docs/BENCHMARKS.md,
+    tests/test_v041_chat.py and test_v041_reliability.py. Modified app config/brief/
+    planner/state/reporting/service/repository/chat/LLM/web/benchmarks/UI, registry,
+    Compose, version metadata, CI tag, release scripts, README and supporting docs.
+    Existing tests adjusted only for intentional version/localization/Chat contracts.
+16. **Tests:** 68 additional cases above the 368-test baseline. Cover token bounds/
+    environment, truncation recovery/accounting/limits, smaller brief schema,
+    preserved findings, truthful banners, explicit/legacy/latest contexts, analyst
+    reference/extra-field rejection, no artifact mutation, content vs transport
+    failures, separate usage/no hidden retries, proposals/cancel/replay/expiry/CSRF,
+    Russian UI metadata and offline phrases.
+17. **pytest:** 436 Windows; 434 + 2 expected skips Linux, as above.
+18. **Ruff:** both checks pass on both platforms.
+19. **Docker:** final shared image built; local health/startup verified. No socket
+    mounts or public bindings added.
+20. **Offline smoke:** same-project 4 SAST + 3 DAST = 7; baseline 7/7, zero LLM use.
+21. **Limitations:** no claim of real-provider success, physical macOS/Apple Silicon
+    validation, arm64 rebuild or remote CI execution for this patch. Jobs/proposals/
+    Chat history remain in-memory; filesystem reports persist. Chat projection is
+    capped at 50 findings with selected finding first, answer <=1800 characters,
+    references <=7. Prose accuracy/language/humor still require human review.
+    Existing pkg_resources and Starlette/httpx deprecation warnings remain nonfatal.
+    No commit, push, publication or release ZIP from this dirty checkout was made.
+22. **Manual Windows provider test:** see the exact steps below.
+
+## Manual Windows real-provider acceptance
+
+Edit .env locally using README/.env.example. Preserve your private key and never
+print/commit it. Specifically update old budget overrides to:
+
+```dotenv
+LLM_PLANNER_MAX_TOKENS=320
+LLM_PLANNER_RETRY_MAX_TOKENS=512
+LLM_ENRICHMENT_BATCH_SIZE=1
+LLM_ENRICHMENT_MAX_TOKENS=1200
+LLM_ENRICHMENT_RETRY_MAX_TOKENS=2200
+LLM_BRIEF_ENABLED=true
+LLM_BRIEF_MAX_TOKENS=2000
+LLM_BRIEF_RETRY_MAX_TOKENS=3200
+LLM_REPORT_TONE=funny
+LLM_REPORT_LANGUAGE=ru
+```
+
+The following opt-in commands contact the real provider only at --check-llm and
+agent; they were NOT run during automated validation:
+
+```powershell
+.\scripts\bootstrap.ps1
+.\scripts\doctor.ps1
+.\scripts\doctor.ps1 --check-llm
+.\run.ps1 agent --benchmark demo-full --mode full
+.\run.ps1 latest
+.\run.ps1 ui
+```
+
+Open http://127.0.0.1:8080. Test Demo Full / FULL / ИИ-агент /
+Использовать ИИ / С лёгким юмором / Русский. Expected target outcome is every
+stage completed, seven curated findings, ideally Planner requests=1/failures=0.
+A bounded retry or warning must be reported honestly if the gateway truncates.
+
+Select the resulting run with «Обсудить этот запуск», explicitly press
+«Проверить подключение к LLM» for Chat, and ask:
+
+- «Что здесь самое опасное?»
+- «Что исправлять первым?»
+- «Сравни SAST и DAST.»
+- «Дай план исправления.»
+
+Confirm existing-finding references, observation vs interpretation, no scanner
+reruns, no invented vulnerabilities and no original-run usage/report mutation.
+
+---
+
+The remaining records describe earlier releases only. They are historical
+evidence, not current v0.4.1 behavior or validation claims.
+
+# Historical v0.4.0 application validation
 
 Validated on 2026-10-05. No real LLM model discovery or completion requests were
 made; provider behavior was mocked. Existing `.env` and historical runs retained.

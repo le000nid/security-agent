@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.brief import AIBrief
+from app.brief import AIBrief, BriefAttempt
 from app.config import ReportLanguage, ReportTone
 from app.enrichment import EnrichmentStats
 from app.llm import LLMUsage
@@ -102,6 +102,7 @@ class AgentState(BaseModel):
     benchmark_name: str | None = None
     benchmark_expected: str | None = None
     same_application: bool = False
+    llm_enabled: bool = False
     goal: str = "Analyze application security"
     target_url: str | None = None
     source_path: str | None = None
@@ -113,6 +114,7 @@ class AgentState(BaseModel):
     dast_status: Status = Status.NOT_STARTED
     enrichment_status: Status = Status.NOT_STARTED
     ai_brief_status: Status = Status.NOT_STARTED
+    brief_attempts: list[BriefAttempt] = Field(default_factory=list, max_length=3)
     ai_brief: AIBrief | None = None
     enrichment: EnrichmentStats = Field(default_factory=EnrichmentStats)
     report_tone: ReportTone = ReportTone.PROFESSIONAL

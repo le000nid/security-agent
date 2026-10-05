@@ -26,12 +26,16 @@ class Settings(BaseModel):
     llm_api_key: SecretStr = Field(default=SecretStr(""), exclude=True, repr=False)
     agent_max_steps: int = Field(default=8, ge=1, le=100)
     agent_max_planner_calls: int = Field(default=8, ge=1, le=100)
+    llm_planner_max_tokens: int = Field(default=320, ge=256, le=2048)
+    llm_planner_retry_max_tokens: int = Field(default=512, ge=256, le=2048)
     llm_enrichment_batch_size: int = Field(default=1, ge=1, le=20)
     llm_enrichment_max_tokens: int = Field(default=1200, ge=256, le=8192)
     llm_enrichment_retry_max_tokens: int = Field(default=2200, ge=256, le=8192)
     llm_brief_enabled: bool = True
-    llm_brief_max_tokens: int = Field(default=1000, ge=256, le=8192)
-    llm_brief_retry_max_tokens: int = Field(default=1600, ge=256, le=8192)
+    llm_brief_max_tokens: int = Field(default=2000, ge=256, le=8192)
+    llm_brief_retry_max_tokens: int = Field(default=3200, ge=256, le=8192)
+    llm_chat_max_tokens: int = Field(default=2400, ge=256, le=8192)
+    llm_chat_retry_max_tokens: int = Field(default=3600, ge=256, le=8192)
     llm_report_tone: ReportTone = ReportTone.PROFESSIONAL
     llm_report_language: ReportLanguage = ReportLanguage.RU
 
@@ -40,6 +44,8 @@ class Settings(BaseModel):
         if (
             self.llm_enrichment_retry_max_tokens <= self.llm_enrichment_max_tokens
             or self.llm_brief_retry_max_tokens <= self.llm_brief_max_tokens
+            or self.llm_planner_retry_max_tokens <= self.llm_planner_max_tokens
+            or self.llm_chat_retry_max_tokens <= self.llm_chat_max_tokens
         ):
             raise ValueError("Retry token budgets must exceed normal budgets")
         return self

@@ -1,46 +1,49 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="csrf-token" content="{{ csrf_token }}">
-  <title>AI Security Agent · Local lab</title>
+  <title>AI Security Agent · Учебная лаборатория</title>
   <link rel="stylesheet" href="/static/app.css"><script src="/static/app.js" defer></script>
 </head>
 <body>
-<header><div><strong>AI Security Agent</strong><span class="tag">LOCAL LAB · {{ version }}</span></div><p>Reviewed tools. Controlled targets. Evidence first.</p></header>
+<header><div><strong>AI Security Agent</strong><span class="tag">ЛОКАЛЬНАЯ ЛАБОРАТОРИЯ · {{ version }}</span></div><p>Контролируемые инструменты и цели. Выводы на основе наблюдений.</p></header>
 <div class="shell">
-<nav aria-label="Main navigation">
-  <button data-view="guided" aria-current="page">Guided Scan</button><button data-view="chat">Chat</button><button data-view="runs">Runs</button><button data-view="benchmarks">Benchmarks</button>
-  <aside><strong>Local, single-user</strong><p>No external targets. No shell access. AI is optional.</p><p id="llm-status">LLM: unchecked</p><button id="check-llm">Check LLM connectivity</button><small>Explicit model discovery only; no completion request.</small></aside>
+<nav aria-label="Основная навигация">
+  <button data-view="guided" aria-current="page">Сканирование</button><button data-view="chat">ИИ-помощник</button><button data-view="runs">История запусков</button><button data-view="benchmarks">Учебные стенды</button>
+  <aside><strong>Локально, для одного пользователя</strong><p>Внешние цели запрещены. Shell-доступа нет. ИИ необязателен.</p><p id="llm-status">Подключение чата к LLM: не проверено</p><button id="check-llm">Проверить подключение к LLM</button><small>Проверяется доступность модели, без генерации ответа. Это состояние подключения чата; каждый новый анализ отдельно проверяет LLM перед использованием.</small></aside>
 </nav>
 <main>
 <div id="notice" role="status" aria-live="polite"></div>
 <section id="guided" class="view">
-  <p class="eyebrow">ANALYZE / 01</p><h1>Start with a known target.</h1><p class="intro">Choose a local training benchmark. Run the scanners on their own, or add controlled AI analysis.</p>
+  <p class="eyebrow">АНАЛИЗ / 01</p><h1>Начните с учебного стенда.</h1><p class="intro">Выберите локальный проект. Запустите проверку сканерами без ИИ или добавьте контролируемый ИИ-анализ.</p>
   <form id="scan-form" class="card">
-    <div class="grid"><label>Benchmark<select id="benchmark" required></select></label><label>Analysis scope<select id="mode"></select></label></div>
-    <p id="benchmark-description" class="muted"></p>
-    <div class="grid"><label>Orchestration<select id="orchestration"><option value="scan">Standard Scan · fixed sequence</option><option value="agent">AI Agent · controlled decisions</option></select></label><label class="check"><input id="llm" type="checkbox"> Enable AI (provider requests)</label></div>
-    <p id="agent-hint" class="muted">Standard Scan works without an LLM. AI Agent requires AI enabled.</p>
-    <div class="grid"><label>Report tone<select id="tone"><option value="professional">Professional</option><option value="concise">Concise</option><option value="funny">Funny</option></select></label><label>Report language<select id="language"><option value="ru">Русский</option><option value="en">English</option></select></label></div>
-    <label class="check"><input id="evidence" type="checkbox"> Send short normalized evidence to the AI provider (optional)</label>
-    <button id="start" class="primary" type="submit">Start Analysis</button>
+    <div class="grid"><label>Учебный стенд<select id="benchmark" required></select></label><label>Тип анализа<select id="mode"></select></label></div>
+    <p id="benchmark-description" class="muted"></p><p class="muted">SAST проверяет исходный код. DAST проверяет работающий HTTP-сервис. FULL объединяет оба типа.</p>
+    <div class="grid"><label>Режим запуска<select id="orchestration"><option value="scan">Обычное сканирование</option><option value="agent">ИИ-агент</option></select></label><label class="check"><input id="llm" type="checkbox"> Использовать ИИ (запросы к провайдеру)</label></div>
+    <p id="agent-hint" class="muted">Обычное сканирование выполняет фиксированную последовательность и работает без LLM. ИИ-агент выбирает только между разрешёнными действиями; единственный допустимый шаг выполняется автоматически. Shell-команды модель не выполняет.</p>
+    <div class="grid"><label>Стиль итогового вывода<select id="tone"><option value="professional">Профессиональный</option><option value="concise">Краткий</option><option value="funny">С лёгким юмором</option></select></label><label>Язык отчёта<select id="language"><option value="ru">Русский</option><option value="en">Английский</option></select></label></div>
+    <p class="muted">Стиль и язык применяются к итогу ИИ, а не к техническим данным сканеров. Юмор не меняет серьёзность проблем.</p>
+    <label class="check"><input id="evidence" type="checkbox"> Передать провайдеру краткие нормализованные свидетельства для обогащения находок (необязательно)</label>
+    <button id="start" class="primary" type="submit">Запустить анализ</button>
   </form>
-  <section id="progress" class="card" hidden><h2>Analysis progress</h2><p id="job-status" aria-live="polite"></p><ol id="events"></ol><button id="open-result" hidden>Open results</button></section>
+  <section id="progress" class="card" hidden><h2>Ход анализа</h2><p id="job-status" aria-live="polite"></p><ol id="events"></ol><button id="open-result" hidden>Открыть результаты</button></section>
 </section>
-<section id="benchmarks" class="view" hidden><p class="eyebrow">TARGETS / 02</p><h1>Training benchmarks</h1><p>Curated local coverage, not a measure of real-world detection accuracy.</p><div id="benchmark-cards" class="cards"></div></section>
-<section id="runs" class="view" hidden><p class="eyebrow">EVIDENCE / 03</p><h1>Run history</h1><button id="refresh-runs">Refresh history</button><div id="run-list" class="cards"></div></section>
-<section id="detail" class="view" hidden><p class="eyebrow">RESULTS</p><h1 id="run-title">Run detail</h1><div id="run-meta" class="card"></div><div id="brief" class="card"></div><div id="downloads" class="actions"></div>
-  <h2>Findings</h2><div class="filters"><label>Severity<select id="severity"><option value="">All severities</option><option>critical</option><option>high</option><option>medium</option><option>low</option><option>info</option><option>unknown</option></select></label><label>Source<select id="source"><option value="">SAST + DAST</option><option>SAST</option><option>DAST</option></select></label><label>Category<select id="category"><option value="">All categories</option></select></label></div>
-  <div class="table-wrap"><table><thead><tr><th>Severity</th><th>Finding</th><th>Source / tool</th><th>Category</th><th>Location</th></tr></thead><tbody id="findings"></tbody></table></div><p id="finding-count"></p>
+<section id="benchmarks" class="view" hidden><p class="eyebrow">ЦЕЛИ / 02</p><h1>Учебные стенды</h1><p>Ожидаемые находки проверяют покрытие учебных примеров, а не точность обнаружения уязвимостей в реальных продуктах.</p><div id="benchmark-cards" class="cards"></div></section>
+<section id="runs" class="view" hidden><p class="eyebrow">РЕЗУЛЬТАТЫ / 03</p><h1>История запусков</h1><button id="refresh-runs">Обновить историю</button><div id="run-list" class="cards"></div></section>
+<section id="detail" class="view" hidden><p class="eyebrow">РЕЗУЛЬТАТЫ</p><h1 id="run-title">Результаты запуска</h1><button id="discuss-run">Обсудить этот запуск</button><div id="run-meta" class="card"></div><div id="brief" class="card"></div><div id="downloads" class="actions"></div>
+  <h2>Найденные проблемы</h2><div class="filters"><label>Серьёзность<select id="severity"><option value="">Все уровни</option><option value="critical">CRITICAL</option><option value="high">HIGH</option><option value="medium">MEDIUM</option><option value="low">LOW</option><option value="info">INFO</option><option value="unknown">UNKNOWN</option></select></label><label>Источник<select id="source"><option value="">SAST + DAST</option><option>SAST</option><option>DAST</option></select></label><label>Категория<select id="category"><option value="">Все категории</option></select></label></div>
+  <div class="table-wrap"><table><thead><tr><th>Серьёзность</th><th>Находка</th><th>Источник / инструмент</th><th>Категория</th><th>Расположение</th></tr></thead><tbody id="findings"></tbody></table></div><p id="finding-count"></p>
   <article id="finding-detail" class="card" hidden></article>
-  <details><summary>Execution trace</summary><pre id="trace"></pre></details>
-  <details><summary>Markdown report (plain text)</summary><pre id="report"></pre></details>
+  <details><summary>Ход работы агента</summary><div id="trace"></div></details>
+  <details><summary>Отчёт Markdown (текст)</summary><pre id="report"></pre></details>
 </section>
-<section id="chat" class="view" hidden><p class="eyebrow">ASSIST / 04</p><h1>Talk about your results.</h1><p>Chat selects fixed operations. It cannot run shell commands, add targets or change scanner flags.</p><div class="actions"><button data-intent="HELP">Help</button><button data-intent="LIST_BENCHMARKS">Benchmarks</button><button data-intent="SHOW_LATEST_RUN">Latest run</button><button data-intent="SHOW_FINDINGS">Findings</button><button data-intent="SHOW_REPORT">Report</button><button data-intent="SUMMARIZE_RUN">Summary</button><button id="chat-high">High findings</button></div>
-  <p class="muted">Quick actions work offline. Free-form AI parsing requires an explicit successful connectivity check. Only the current message is sent; the last 30 messages stay in this tab, not in run reports.</p>
-  <div id="chat-history" role="log" aria-live="polite"></div><form id="chat-form"><label for="chat-message">Message (RU / EN)</label><div class="chat-input"><input id="chat-message" maxlength="2000" placeholder="Проверь demo-full полностью" required><button class="primary" type="submit">Send</button></div></form>
+<section id="chat" class="view" hidden><p class="eyebrow">ПОМОЩНИК / 04</p><h1>Обсудите результаты анализа.</h1><p>ИИ-помощник анализирует сохранённые результаты. Он не получает shell-доступ и не может самостоятельно добавлять цели сканирования.</p>
+  <div class="card"><label>Текущий запуск<select id="chat-run"></select></label><button id="refresh-chat-runs">Сменить / обновить запуск</button><p id="chat-context"></p><label>Находка<select id="chat-finding"><option value="">Весь запуск</option></select></label></div>
+  <div class="actions"><button id="chat-high">Показать HIGH</button><button data-intent="ANALYZE_RUN">Что самое опасное?</button><button data-intent="PRIORITIZE_FINDINGS">Что исправлять первым?</button><button data-intent="COMPARE_SAST_DAST">Сравнить SAST и DAST</button><button data-intent="REMEDIATION_PLAN">Сделать план исправления</button><button data-intent="SHOW_REPORT">Показать отчёт</button><button data-intent="LIST_BENCHMARKS">Учебные стенды</button><button data-intent="HELP">Помощь</button></div>
+  <p class="muted">Локальные фильтры и отчёты работают без ИИ. Для нового ИИ-анализа явно проверьте подключение. Передаются текущий вопрос и краткий контекст выбранного запуска / находки, без сырых логов и исходников. Последние 30 сообщений остаются только в этой вкладке и не попадают в отчёты. Новый запуск всегда требует подтверждения.</p>
+  <div id="chat-history" role="log" aria-live="polite"></div><form id="chat-form"><label for="chat-message">Вопрос о выбранном запуске</label><div class="chat-input"><input id="chat-message" maxlength="2000" placeholder="Спросите что-нибудь о выбранном запуске..." required><button class="primary" type="submit">Отправить</button></div></form>
 </section>
-<footer>Intentionally vulnerable educational fixtures. Never deploy this lab publicly.</footer>
+<footer>Учебные примеры намеренно содержат небезопасные шаблоны. Не публикуйте лабораторию в интернете.</footer>
 </main></div>
 </body></html>

@@ -13,6 +13,54 @@ from app.safe_logging import redact, redact_data
 from benchmark.evaluator import evaluate
 
 
+def llm_components(state: AgentState) -> dict:
+    """Independent component outcomes; retain llm_status for older consumers."""
+    failures = sum(
+        t.status == "rejected" and t.decision_source == "llm_planner"
+        for t in state.trace
+    )
+    requests = state.planner_request_count
+    planner_failed = state.exit_code in (4, 5)
+    brief_error = next(
+        (
+            t.error_code
+            for t in reversed(state.trace)
+            if t.action == "GENERATE_AI_BRIEF" and t.error_code
+        ),
+        None,
+    )
+    return {
+        "planner": {
+            "status": "failed"
+            if planner_failed
+            else "completed_with_retries"
+            if requests and failures
+            else "completed"
+            if requests
+            else "skipped",
+            "requests": requests,
+            "failures": failures,
+        },
+        "enrichment": {
+            "status": state.enrichment_status.value,
+            "requested": state.enrichment.requested,
+            "completed": state.enrichment.completed,
+            "failed": state.enrichment.failed,
+        },
+        "brief": {
+            "status": state.ai_brief_status.value,
+            "attempts": [a.model_dump() for a in state.brief_attempts],
+            "error_code": brief_error
+            or (
+                "llm_preflight_failed"
+                if state.ai_brief_status == Status.FAILED
+                and state.last_error_code == "llm_preflight_failed"
+                else None
+            ),
+        },
+    }
+
+
 def write_reports(
     state: AgentState, paths: RunPaths, metadata: dict | None = None
 ) -> None:
@@ -49,6 +97,8 @@ def write_reports(
         if state.exit_code in (4, 5) or state.enrichment_status == Status.FAILED
         else state.enrichment_status.value,
         "llm": metadata,
+        "llm_enabled": state.llm_enabled,
+        "llm_components": llm_components(state),
         "llm_usage": state.llm_usage.report(),
         "enrichment": state.enrichment.model_dump(),
         "ai_brief_status": state.ai_brief_status.value,

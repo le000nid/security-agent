@@ -208,7 +208,7 @@ def test_brief_invalid_output_cannot_change_findings(brief_rig, payload, code):
     with pytest.raises(LLMError) as caught:
         generate_ai_brief(state, client, Settings())
     assert caught.value.code == code
-    assert state.findings == [finding] and http.request.call_count == 1
+    assert state.findings == [finding] and http.request.call_count == 2
 
 
 @pytest.mark.parametrize("succeeds", [True, False])
@@ -327,7 +327,7 @@ def test_partial_enrichment_is_warning_and_brief_still_runs(brief_rig, monkeypat
 
 def test_brief_failure_does_not_break_reporting(brief_rig):
     state, _, http, registry, _ = brief_rig
-    http.request.side_effect = [encoded(ENRICHMENT), chat("bad JSON")]
+    http.request.side_effect = [encoded(ENRICHMENT), chat("bad JSON"), chat("bad JSON")]
     run_deterministic(state, registry)
     assert state.exit_code == 0 and state.ai_brief_status == Status.FAILED
     assert state.findings[0].description == ENRICHMENT["description"]

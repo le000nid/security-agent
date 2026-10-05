@@ -1,5 +1,6 @@
 """Application-owned benchmark registry. Never populated from HTTP or LLM input."""
 
+import json
 import re
 from pathlib import Path, PurePosixPath
 from typing import Annotated, Literal
@@ -19,6 +20,7 @@ class Benchmark(BaseModel):
     id: BenchmarkId
     name: str = Field(min_length=1, max_length=120)
     description: str = Field(min_length=1, max_length=1000)
+    description_ru: str | None = Field(default=None, min_length=1, max_length=1000)
     capabilities: list[Literal["sast", "dast"]] = Field(min_length=1, max_length=2)
     source_path: str | None = None
     target_url: str | None = None
@@ -70,6 +72,22 @@ class Benchmark(BaseModel):
         if not required.issubset(self.capabilities):
             raise ValueError("benchmark_mode_not_supported")
         return selected
+
+    def ui_metadata(self) -> dict:
+        """Baseline counts derive from the reviewed file, never a JS ID switch."""
+        baseline_count = None
+        if self.expected_findings:
+            try:
+                entries = json.loads(
+                    (
+                        config_directory() / "expected" / self.expected_findings
+                    ).read_text(encoding="utf-8")
+                )
+                if isinstance(entries, list):
+                    baseline_count = len(entries)
+            except (OSError, ValueError):
+                pass
+        return {**self.model_dump(mode="json"), "baseline_count": baseline_count}
 
     def local_source(self) -> str | None:
         if self.source_path is None:

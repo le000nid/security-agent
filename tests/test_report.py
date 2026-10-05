@@ -95,7 +95,7 @@ def test_canonical_severity_order_in_report_and_summary(tmp_path: Path) -> None:
     assert table_positions == sorted(table_positions)
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     assert list(summary["by_severity"]) == list(reversed(severities))
-    assert summary["version"] == "0.4.0"
+    assert summary["version"] == "0.4.1"
     assert summary["llm"] is None
     assert summary["llm_usage"] == {
         "requests": 0,
