@@ -82,7 +82,9 @@ def brief_input(state: "AgentState") -> dict:
                     name: getattr(state, f"{name}_status").value
                     for name in ("sast", "dast", "enrichment")
                 },
-                "subjects_correspondence": "Not verified; educational defaults analyze different applications.",
+                "subjects_correspondence": "Same application project, from trusted benchmark registry."
+                if state.same_application
+                else "Not verified; educational defaults analyze different applications.",
                 "enrichment": state.enrichment.model_dump(exclude={"failures"}),
             },
             "counts": {

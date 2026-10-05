@@ -38,13 +38,16 @@ jobs:
           context: .
           platforms: linux/amd64
           load: true
-          tags: ai-security-agent:0.3.2
+          tags: ai-security-agent:0.4.0
           cache-from: type=gha
       - name: Scanner-only lab smoke
         run: |
           mkdir -p runs logs reports
           export AGENT_UID=$(id -u) AGENT_GID=$(id -g)
-          docker compose up -d --wait --wait-timeout 180 juice-shop
-          docker compose --profile agent run --rm agent scan --mode full --target-url http://juice-shop:3000 --source-path /targets/sample-app --no-llm
+          docker compose up -d --wait --wait-timeout 180 juice-shop demo-full
+          docker compose --profile agent run --rm --no-deps agent scan --benchmark demo-full --mode full --no-llm
+          docker compose --profile agent run --rm --no-deps --entrypoint python agent -m benchmark.verify_run
+          docker compose --profile ui up -d --wait --wait-timeout 180 ui
+          curl --fail http://127.0.0.1:8080/healthz
       - if: always()
-        run: docker compose down
+        run: docker compose --profile ui --profile agent down

@@ -5,6 +5,8 @@ try {
     Test-Docker
     Initialize-AgentImage
     Start-Lab
-    Invoke-Docker compose --profile agent run --rm agent scan --mode full --target-url http://juice-shop:3000 --source-path /targets/sample-app --no-llm
-    Write-Host 'Bootstrap complete. Set LLM_API_KEY in .env, then run .\scripts\doctor.ps1 and .\run.ps1 agent'
+    foreach ($benchmark in @('sample-sast', 'juice-shop', 'demo-full')) {
+        Invoke-Docker compose --profile agent run --rm --no-deps agent scan --benchmark $benchmark --no-llm
+    }
+    Write-Host 'Bootstrap complete. Run .\scripts\doctor.ps1 and .\run.ps1 ui. LLM is optional.'
 } catch { Write-Error $_.Exception.Message -ErrorAction Continue; exit 6 }

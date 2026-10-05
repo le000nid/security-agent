@@ -16,11 +16,18 @@ def _key(record: dict[str, Any]) -> tuple[str, str, str, str]:
 
 
 def evaluate(
-    actual: list[dict[str, Any]], expected: list[dict[str, Any]]
+    actual: list[dict[str, Any]],
+    expected: list[dict[str, Any]],
+    *,
+    benchmark_id: str | None = None,
 ) -> dict[str, Any]:
     """Compute set-based fixture precision/recall; this is not a pentest metric."""
 
-    actual_keys = {_key(record) for record in actual if record.get("tool") == "semgrep"}
+    actual_keys = {
+        _key(record)
+        for record in actual
+        if benchmark_id or record.get("tool") == "semgrep"
+    }
     expected_keys = {_key(record) for record in expected}
     detected = actual_keys & expected_keys
     missed = expected_keys - actual_keys
@@ -32,7 +39,10 @@ def evaluate(
         return [dict(zip(KEY_FIELDS, key, strict=True)) for key in sorted(keys)]
 
     return {
-        "scope": "curated local Semgrep fixture coverage only",
+        **({"benchmark_id": benchmark_id} if benchmark_id else {}),
+        "scope": "curated local benchmark coverage"
+        if benchmark_id
+        else "curated local Semgrep fixture coverage only",
         "expected_count": len(expected_keys),
         "detected_expected_count": len(detected),
         "detected_expected_findings": records(detected),

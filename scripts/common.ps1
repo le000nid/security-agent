@@ -18,12 +18,12 @@ function New-RuntimeDirectories {
     foreach ($dir in @('runs', 'logs', 'reports')) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
 }
 function Initialize-AgentImage {
-    $images = @(& docker compose --profile agent config --images)
+    $images = @(& docker compose --profile agent config --images agent)
     if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve Compose images.' }
-    $selected = $images | Where-Object { $_ -notlike '*juice-shop*' } | Select-Object -First 1
+    $selected = $images | Select-Object -First 1
     if ($selected -like 'ai-security-agent:*') { Invoke-Docker compose build agent }
     else { Invoke-Docker compose --profile agent pull agent }
 }
 function Start-Lab {
-    Invoke-Docker compose up -d --wait --wait-timeout 180 juice-shop
+    Invoke-Docker compose up -d --wait --wait-timeout 180 juice-shop demo-full
 }

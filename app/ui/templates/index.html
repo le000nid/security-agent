@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>AI Security Agent · Local lab</title>
+  <link rel="stylesheet" href="/static/app.css"><script src="/static/app.js" defer></script>
+</head>
+<body>
+<header><div><strong>AI Security Agent</strong><span class="tag">LOCAL LAB · {{ version }}</span></div><p>Reviewed tools. Controlled targets. Evidence first.</p></header>
+<div class="shell">
+<nav aria-label="Main navigation">
+  <button data-view="guided" aria-current="page">Guided Scan</button><button data-view="chat">Chat</button><button data-view="runs">Runs</button><button data-view="benchmarks">Benchmarks</button>
+  <aside><strong>Local, single-user</strong><p>No external targets. No shell access. AI is optional.</p><p id="llm-status">LLM: unchecked</p><button id="check-llm">Check LLM connectivity</button><small>Explicit model discovery only; no completion request.</small></aside>
+</nav>
+<main>
+<div id="notice" role="status" aria-live="polite"></div>
+<section id="guided" class="view">
+  <p class="eyebrow">ANALYZE / 01</p><h1>Start with a known target.</h1><p class="intro">Choose a local training benchmark. Run the scanners on their own, or add controlled AI analysis.</p>
+  <form id="scan-form" class="card">
+    <div class="grid"><label>Benchmark<select id="benchmark" required></select></label><label>Analysis scope<select id="mode"></select></label></div>
+    <p id="benchmark-description" class="muted"></p>
+    <div class="grid"><label>Orchestration<select id="orchestration"><option value="scan">Standard Scan · fixed sequence</option><option value="agent">AI Agent · controlled decisions</option></select></label><label class="check"><input id="llm" type="checkbox"> Enable AI (provider requests)</label></div>
+    <p id="agent-hint" class="muted">Standard Scan works without an LLM. AI Agent requires AI enabled.</p>
+    <div class="grid"><label>Report tone<select id="tone"><option value="professional">Professional</option><option value="concise">Concise</option><option value="funny">Funny</option></select></label><label>Report language<select id="language"><option value="ru">Русский</option><option value="en">English</option></select></label></div>
+    <label class="check"><input id="evidence" type="checkbox"> Send short normalized evidence to the AI provider (optional)</label>
+    <button id="start" class="primary" type="submit">Start Analysis</button>
+  </form>
+  <section id="progress" class="card" hidden><h2>Analysis progress</h2><p id="job-status" aria-live="polite"></p><ol id="events"></ol><button id="open-result" hidden>Open results</button></section>
+</section>
+<section id="benchmarks" class="view" hidden><p class="eyebrow">TARGETS / 02</p><h1>Training benchmarks</h1><p>Curated local coverage, not a measure of real-world detection accuracy.</p><div id="benchmark-cards" class="cards"></div></section>
+<section id="runs" class="view" hidden><p class="eyebrow">EVIDENCE / 03</p><h1>Run history</h1><button id="refresh-runs">Refresh history</button><div id="run-list" class="cards"></div></section>
+<section id="detail" class="view" hidden><p class="eyebrow">RESULTS</p><h1 id="run-title">Run detail</h1><div id="run-meta" class="card"></div><div id="brief" class="card"></div><div id="downloads" class="actions"></div>
+  <h2>Findings</h2><div class="filters"><label>Severity<select id="severity"><option value="">All severities</option><option>critical</option><option>high</option><option>medium</option><option>low</option><option>info</option><option>unknown</option></select></label><label>Source<select id="source"><option value="">SAST + DAST</option><option>SAST</option><option>DAST</option></select></label><label>Category<select id="category"><option value="">All categories</option></select></label></div>
+  <div class="table-wrap"><table><thead><tr><th>Severity</th><th>Finding</th><th>Source / tool</th><th>Category</th><th>Location</th></tr></thead><tbody id="findings"></tbody></table></div><p id="finding-count"></p>
+  <article id="finding-detail" class="card" hidden></article>
+  <details><summary>Execution trace</summary><pre id="trace"></pre></details>
+  <details><summary>Markdown report (plain text)</summary><pre id="report"></pre></details>
+</section>
+<section id="chat" class="view" hidden><p class="eyebrow">ASSIST / 04</p><h1>Talk about your results.</h1><p>Chat selects fixed operations. It cannot run shell commands, add targets or change scanner flags.</p><div class="actions"><button data-intent="HELP">Help</button><button data-intent="LIST_BENCHMARKS">Benchmarks</button><button data-intent="SHOW_LATEST_RUN">Latest run</button><button data-intent="SHOW_FINDINGS">Findings</button><button data-intent="SHOW_REPORT">Report</button><button data-intent="SUMMARIZE_RUN">Summary</button><button id="chat-high">High findings</button></div>
+  <p class="muted">Quick actions work offline. Free-form AI parsing requires an explicit successful connectivity check. Only the current message is sent; the last 30 messages stay in this tab, not in run reports.</p>
+  <div id="chat-history" role="log" aria-live="polite"></div><form id="chat-form"><label for="chat-message">Message (RU / EN)</label><div class="chat-input"><input id="chat-message" maxlength="2000" placeholder="Проверь demo-full полностью" required><button class="primary" type="submit">Send</button></div></form>
+</section>
+<footer>Intentionally vulnerable educational fixtures. Never deploy this lab publicly.</footer>
+</main></div>
+</body></html>

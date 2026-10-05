@@ -435,7 +435,7 @@ def test_cli_final_console_contains_short_brief_and_paths(
 ):
     state, client, http, registry, _ = brief_rig
     monkeypatch.setattr("app.cli.load_dotenv", lambda: None)
-    monkeypatch.setattr("app.cli.Settings.from_env", lambda: Settings())
+    monkeypatch.setattr("app.service.Settings.from_env", lambda: Settings())
     monkeypatch.setattr("app.cli.OpenAICompatibleClient", lambda **_: client)
     http.request.side_effect = [encoded(ENRICHMENT), encoded(BRIEF)]
     assert (

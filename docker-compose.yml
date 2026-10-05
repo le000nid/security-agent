@@ -1,6 +1,6 @@
 services:
   juice-shop:
-    image: bkimminich/juice-shop:latest
+    image: bkimminich/juice-shop:v20.2.0
     ports:
       - "127.0.0.1:3000:3000"
     restart: unless-stopped
@@ -16,17 +16,28 @@ services:
       timeout: 3s
       retries: 20
       start_period: 15s
-  agent:
+  demo-full:
+    build: ./targets/demo-full
+    image: ai-security-demo-full:0.4.0
+    user: "1000:1000"
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    ports: ["127.0.0.1:3001:3000"]
+    volumes: ["./targets/demo-full:/lab:ro"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+  agent: &agent
     profiles: ["agent"]
     build: .
-    image: ${AGENT_IMAGE:-ai-security-agent:0.3.2}
+    image: ${AGENT_IMAGE:-ai-security-agent:0.4.0}
     user: "${AGENT_UID:-1000}:${AGENT_GID:-1000}"
     security_opt:
       - no-new-privileges:true
     cap_drop: [ALL]
-    depends_on:
-      juice-shop:
-        condition: service_healthy
     environment:
       LLM_PROVIDER: ${LLM_PROVIDER:-}
       LLM_MODEL: ${LLM_MODEL:-}
@@ -47,3 +58,14 @@ services:
       - ./reports:/agent/reports
       - ./runs:/agent/runs
       - ./targets:/targets:ro
+  ui:
+    <<: *agent
+    profiles: ["ui"]
+    command: ["ui", "--host", "0.0.0.0", "--port", "8080"]
+    ports: ["127.0.0.1:8080:8080"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20

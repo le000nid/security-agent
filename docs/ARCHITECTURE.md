@@ -1,4 +1,63 @@
-# Architecture — 0.3.2
+# Architecture — 0.4.0
+
+## Application layers
+
+```text
+CLI ───────────────┐
+Guided Scan ───────┼── RunService ── fixed scan / controlled Agent runtime
+Chat Intent Layer ┘                         │
+                                    ActionValidator
+                                           │
+                                      ToolRegistry
+                                           │
+                                    Semgrep / Nuclei
+                                           │
+                            Finding → enrichment → brief → artifacts
+```
+
+`service.py` owns strict RunRequest/RunResult, benchmark resolution, preflight,
+settings, paths/state initialization and calls to the existing loops. CLI is an
+adapter; FastAPI calls this Python service directly, never a subprocess CLI.
+`benchmarks.py` loads application-owned `config/benchmarks.yaml`. Only enabled
+reviewed service hosts extend the loopback allowlist. UI requests and LLM output
+cannot modify the registry. Benchmark source paths stay beneath the targets
+mount; direct CLI retains its validated local-path contract.
+
+`web.py` provides same-origin Jinja2/vanilla-JS/local-CSS presentation. POSTs
+require a per-process CSRF token; Host/Origin checks resist DNS rebinding and
+cross-site access. No CORS, remote assets, HTML rendering of findings or raw log
+download. Report downloads have a fixed allowlist and contained validated run
+paths. Keys remain server-side. UI/agent share a non-root image; neither mounts
+the Docker socket. Only host wrappers start lab services.
+
+`jobs.py` owns one background thread at a time behind a lock. It retains 50 jobs
+and 100 typed events/job. `events.py` reports creation, stage start/completion/
+warning and completion; observer failures cannot break scanning. No console
+parsing or durable queue. After restart use `repository.py` to browse surviving
+artifacts. Repository supports old summaries without benchmark metadata, skips
+malformed history, and limits listings to 500 runs. Separate CLI processes remain
+independent of the UI lock. Reports in progress may be briefly unreadable.
+
+`chat.py` is a separate controller, not Planner. It converts deterministic
+shortcuts or one bounded structured model response into a closed ChatIntent enum.
+Application code resolves IDs/capabilities and invokes RunService/RunRepository.
+No URLs, paths, shell, flags or Docker actions exist in that schema. Dynamic
+registry metadata is projected into the prompt; adding a benchmark does not
+require prompt edits. Model parsing uses its own `chat` role/counter and no
+transport retry. Discovery is explicit; failures latch unavailable until the
+user checks again. Existing-finding explanations and run summaries use saved
+data without new model requests. Browser history is ephemeral and never becomes
+Planner context. Chat usage is not attributed to individual scan artifacts.
+
+For `demo-full`, the mounted source and HTTP service are the same project. The
+constant HTTP server never imports the deliberately unsafe source-only examples.
+Summary/report/brief receive trusted same-application metadata. Legacy arbitrary
+source/target pairs retain their identity warning. Registry expected-findings
+files evaluate both scanner sources with stable tool/title/source/category keys;
+partial scopes filter the expected baseline. This is curated fixture coverage,
+not real-world precision or proof of exploitability.
+
+## Preserved controlled agent core
 
 ```mermaid
 flowchart LR
@@ -61,8 +120,8 @@ the planner budget, and attempts to write partial reports on any terminal path.
 
 Each new command creates a UTC-format unique directory and atomically replaces
 `runs/latest.json`. Simultaneous runs never share raw/report files. The latest
-pointer names the most recently started run. No background worker or checkpoint
-resumption is implemented.
+pointer names the most recently started run. The UI has a single in-process
+worker; checkpoint resumption is not implemented.
 
 Summary retains status=failed for scanner/planner/report failures, distinguishing
 completed_with_failures from aborted execution via finish_reason/outcome. Optional

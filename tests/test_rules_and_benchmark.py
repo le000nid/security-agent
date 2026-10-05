@@ -75,4 +75,4 @@ def test_compose_agent_is_non_published_and_mounts_targets() -> None:
     agent = compose["services"]["agent"]
     assert "ports" not in agent
     assert "./targets:/targets:ro" in agent["volumes"]
-    assert agent["image"] == "${AGENT_IMAGE:-ai-security-agent:0.3.2}"
+    assert agent["image"] == "${AGENT_IMAGE:-ai-security-agent:0.4.0}"

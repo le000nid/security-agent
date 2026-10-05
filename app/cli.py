@@ -1,22 +1,18 @@
-"""v0.3 subcommands; v0.2 flag-only invocation remains in app.main."""
+"""CLI adapter over RunService; legacy flag-only invocation remains in app.main."""
 
 import argparse
+import json
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 from app import __version__
-from app.agent.loop import run_agent, run_deterministic
-from app.agent.models import AgentState, Status
 from app.agent.planner import Planner
-from app.agent.reporting import finalize
-from app.agent.tools import ToolRegistry
-from app.config import Settings
+from app.benchmarks import BenchmarkRegistry
 from app.llm import OpenAICompatibleClient
 from app.preflight import check_target_reachable
-from app.runs import RunPaths
 from app.safe_logging import configure_logging
-from app.validation import validate_source_path, validate_target_url
+from app.service import RunRequest, RunService
 
 
 def run(argv: list[str]) -> int:
@@ -27,6 +23,7 @@ def run(argv: list[str]) -> int:
     for name in ("scan", "deterministic", "agent"):
         command = sub.add_parser(name)
         command.add_argument("--mode", choices=("sast", "dast", "full"), default=None)
+        command.add_argument("--benchmark")
         command.add_argument("--target-url")
         command.add_argument("--source-path")
         command.add_argument("--no-llm", action="store_true")
@@ -35,9 +32,51 @@ def run(argv: list[str]) -> int:
         command.add_argument("--verbose", action="store_true")
     doctor = sub.add_parser("doctor")
     doctor.add_argument("--check-llm", action="store_true")
+    doctor.add_argument("--check-benchmarks", action="store_true")
     latest = sub.add_parser("latest")
     latest.add_argument("--runs-dir", type=Path, default=Path("runs"))
+    benchmarks = sub.add_parser("benchmarks")
+    benchmarks.add_argument(
+        "operation", choices=("list", "show"), default="list", nargs="?"
+    )
+    benchmarks.add_argument("benchmark_id", nargs="?")
+    ui = sub.add_parser("ui")
+    ui.add_argument(
+        "--host", choices=("127.0.0.1", "localhost", "0.0.0.0"), default="127.0.0.1"
+    )
+    ui.add_argument("--port", type=int, default=8080)
+    ui.add_argument("--runs-dir", type=Path, default=Path("runs"))
     args = parser.parse_args(argv)
+    if args.command == "benchmarks":
+        try:
+            registry = BenchmarkRegistry.load()
+            entries = (
+                [registry.get(args.benchmark_id)]
+                if args.operation == "show"
+                else registry.list()
+            )
+            print(
+                json.dumps(
+                    [b.model_dump() for b in entries], indent=2, ensure_ascii=False
+                )
+            )
+            return 0
+        except (OSError, ValueError):
+            print("benchmark_not_found or invalid registry")
+            return 2
+    if args.command == "ui":
+        import uvicorn
+
+        from app.web import create_app
+
+        print(f"AI Security Agent UI: http://127.0.0.1:{args.port}")
+        uvicorn.run(
+            create_app(runs_dir=args.runs_dir),
+            host=args.host,
+            port=args.port,
+            access_log=False,
+        )
+        return 0
     if args.command == "latest":
         from app.runs import show_latest
 
@@ -45,113 +84,49 @@ def run(argv: list[str]) -> int:
     if args.command == "doctor":
         from app.doctor import diagnose
 
-        return diagnose(check_llm=args.check_llm)
+        return diagnose(
+            check_llm=args.check_llm, check_benchmarks=args.check_benchmarks
+        )
     logger = configure_logging(args.verbose)
     try:
-        settings = Settings.from_env()
-        if args.command == "agent" and args.no_llm:
-            raise ValueError("Agent mode requires LLM; use scan --no-llm")
-        mode = args.mode or (
-            "full"
-            if args.target_url and args.source_path
-            else "sast"
-            if args.source_path
-            else "dast"
+        request = RunRequest(
+            benchmark_id=args.benchmark,
+            mode=args.mode,
+            orchestration="agent" if args.command == "agent" else "scan",
+            target_url=args.target_url,
+            source_path=args.source_path,
+            llm_enabled=not args.no_llm,
+            include_evidence_in_llm=args.include_evidence_in_llm,
         )
-        if mode in ("dast", "full") and not args.target_url:
-            raise ValueError("--target-url required for dast/full")
-        if mode in ("sast", "full") and not args.source_path:
-            raise ValueError("--source-path required for sast/full")
-        target = validate_target_url(args.target_url) if args.target_url else None
-        source = (
-            str(validate_source_path(args.source_path)) if args.source_path else None
+        # Compatibility seams retained; both interfaces use the same RunService.
+        service = RunService(
+            args.runs_dir,
+            client_factory=OpenAICompatibleClient,
+            planner_factory=Planner,
+            preflight=check_target_reachable,
         )
-    except (ValueError, OSError):
+        result = service.run(request)
+    except ValueError:
         logger.error(
-            "Invalid configuration/input; check mode, local target, source and numeric limits"
+            "Invalid configuration/input; check benchmark, mode, local target, source and numeric limits"
         )
         return 2
-    try:
-        paths = RunPaths.create(args.runs_dir)
     except OSError:
         logger.error("Cannot create run directory; check mount permissions")
         return 6
-    state = AgentState(
-        run_id=paths.run_id,
-        target_url=target,
-        source_path=source,
-        target_validated=bool(target),
-        source_validated=bool(source),
-        source_available=bool(source),
-        orchestration="agent" if args.command == "agent" else "deterministic",
-        report_tone=settings.llm_report_tone,
-        report_language=settings.llm_report_language,
-    )
-    if mode == "sast":
-        state.dast_status = Status.SKIPPED
-    if mode == "dast":
-        state.sast_status = Status.SKIPPED
-    if args.no_llm:
-        state.enrichment_status = Status.SKIPPED
-    if args.no_llm or not settings.llm_brief_enabled:
-        state.ai_brief_status = Status.SKIPPED
-    if mode in ("dast", "full"):
-        try:
-            check_target_reachable(target)
-            state.target_available = True
-        except (ValueError, OSError):
-            state.dast_status = Status.FAILED
-            state.exit_code = 6
-            state.last_error = (
-                "Local target unreachable; start Juice Shop and run doctor"
-            )
-    client = None
-    if not args.no_llm:
-        try:
-            client = OpenAICompatibleClient(settings=settings)
-            client.ensure_model_available()
-        except ValueError:
-            state.enrichment_status = Status.FAILED
-            state.last_error = (
-                "LLM preflight failed; check configuration and model availability"
-            )
-            if args.command == "agent":
-                state.exit_code = state.exit_code or 4
-                state.finish_reason = "llm_preflight_failed"
-                finalize(state, paths, client.public_metadata() if client else None)
-                logger.error(state.last_error)
-                return state.exit_code
-            state.warnings.append("llm_preflight_failed")
-            state.last_error_code = "llm_preflight_failed"
-            if state.ai_brief_status != Status.SKIPPED:
-                state.ai_brief_status = Status.FAILED
-            client = None
-    registry = ToolRegistry(
-        paths,
-        client,
-        include_evidence=args.include_evidence_in_llm,
-        batch_size=settings.llm_enrichment_batch_size,
-        settings=settings,
-    )
-    if args.command == "agent":
-        run_agent(state, Planner(client), registry, settings)
-    else:
-        run_deterministic(state, registry)
     logger.info(
         "Run %s: %d findings; reports: %s",
-        paths.run_id,
-        len(state.findings),
-        paths.reports,
+        result.run_id,
+        result.findings_count,
+        result.reports_path,
     )
-    if state.report_status == Status.COMPLETED:
-        if state.ai_brief:
-            logger.info(
-                "AI Security Brief: %s — %s",
-                state.ai_brief.headline,
-                state.ai_brief.overall_summary,
-            )
-        else:
-            logger.info("AI Security Brief: %s", state.ai_brief_status.value)
-        logger.info("Report: %s", paths.reports / "report.md")
-        logger.info("Summary: %s", paths.reports / "summary.json")
-    return state.exit_code
+    brief = result.summary.get("ai_brief")
+    if brief:
+        logger.info(
+            "AI Security Brief: %s — %s", brief["headline"], brief["overall_summary"]
+        )
+    else:
+        logger.info("AI Security Brief: %s", result.summary["ai_brief_status"])
+    logger.info("Report: %s", Path(result.reports_path) / "report.md")
+    logger.info("Summary: %s", Path(result.reports_path) / "summary.json")
+    return result.exit_code

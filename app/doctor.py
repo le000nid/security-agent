@@ -3,12 +3,12 @@
 import os
 import platform
 import shutil
-import socket
 import subprocess
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from app import __version__
+from app.benchmarks import BenchmarkRegistry
 from app.config import Settings
 from app.llm import OpenAICompatibleClient
 from app.preflight import check_target_reachable
@@ -16,7 +16,7 @@ from app.resources import config_directory
 from app.scanner_env import scanner_environment
 
 
-def diagnose(*, check_llm: bool = False) -> int:
+def diagnose(*, check_llm: bool = False, check_benchmarks: bool = False) -> int:
     failed = False
     print(f"ai-security-agent {__version__}; {platform.system()}/{platform.machine()}")
     for binary, flag in (("semgrep", "--version"), ("nuclei", "-version")):
@@ -49,18 +49,30 @@ def diagnose(*, check_llm: bool = False) -> int:
         print("FAIL runs unwritable; check bind mount UID/GID")
         failed = True
     for path in (
-        Path("/targets/sample-app"),
         config_directory() / "semgrep.yaml",
         config_directory() / "nuclei",
     ):
         print(f"{'OK' if path.exists() else 'FAIL'} {path}")
         failed |= not path.exists()
     try:
-        socket.getaddrinfo("juice-shop", 3000)
-        check_target_reachable("http://juice-shop:3000")
-        print("OK juice-shop DNS and HTTP reachability")
+        registry = BenchmarkRegistry.load()
+        print("OK benchmark registry")
+        for benchmark in registry.list():
+            if benchmark.source_path:
+                source = Path(benchmark.local_source())
+                print(f"{'OK' if source.is_dir() else 'FAIL'} source: {benchmark.id}")
+                failed |= not source.is_dir()
+            if check_benchmarks and benchmark.target_url:
+                try:
+                    check_target_reachable(benchmark.target_url)
+                    print(f"OK HTTP: {benchmark.id}")
+                except (OSError, ValueError):
+                    print(
+                        f"FAIL HTTP: {benchmark.id}; start bundled benchmark services"
+                    )
+                    failed = True
     except (OSError, ValueError):
-        print("FAIL juice-shop unreachable; docker compose up -d --wait juice-shop")
+        print("FAIL benchmark registry or source configuration")
         failed = True
     missing = [
         name

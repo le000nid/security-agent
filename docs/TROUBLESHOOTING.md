@@ -1,8 +1,31 @@
-# Troubleshooting — 0.3.2
+# Troubleshooting — 0.4.0
 
 Start with `scripts/doctor.ps1` (PowerShell) or `scripts/doctor.sh` (Linux/macOS).
 Diagnostic commands below never require printing `.env` or API credentials.
 Use `docker compose config --quiet`; plain config output expands secrets.
+
+## UI / benchmarks / offline operation
+
+| Symptom | Check and recovery |
+| --- | --- |
+| Port 8080 conflict | Inspect `docker compose --profile ui ps`; stop the conflicting application or use another loopback-only host port. Never expose UI publicly. |
+| UI missing after image upgrade | Run `docker compose build agent`, then `run.ps1 ui` / `run.sh ui` to recreate with the shared image. |
+| Benchmark unavailable | `benchmarks show <id>`, `doctor --check-benchmarks`, `docker compose ps -a`; UI cannot start containers itself. |
+| demo-full unhealthy | `docker compose logs --tail 80 demo-full`; check port 3001, source mount and `server.py`; retry `docker compose up -d --wait demo-full`. |
+| SAST-only while Juice Shop is offline | This is supported; default doctor and SAST do not require DAST service health. |
+| agent_requires_llm | Enable AI with valid settings, or choose Standard Scan / `scan --no-llm`. |
+| LLM unavailable | Keep using scanner-only Guided Scan and deterministic Chat quick actions. Optional discovery is `doctor --check-llm`. |
+| Chat free-form unavailable | Click Check LLM explicitly after restoring provider access; failed parsing latches unavailable to avoid outage loops. Quick actions still work. |
+| scan_already_running | Wait for the active UI job; only one is allowed. Use Runs to inspect previous artifacts. |
+| Stale job after restart | Job handles are in memory, not durable. Refresh Runs; inspect `runs/<id>/reports/summary.json` and `agent_trace.json`. An interrupted run may have only partial logs. |
+| csrf_failed | Reload the page after a UI restart; the per-process token changed. Use the same localhost/127.0.0.1 origin, not a public reverse proxy. |
+| host_not_allowed | Open `http://127.0.0.1:8080` or localhost; custom domains and external hosts are intentionally denied. |
+| Docker input/output error / read-only containerd | Check host and Docker virtual-disk free space. Free space deliberately, then restart Docker Desktop. Do not blindly prune images/volumes or delete reports. |
+
+Reports may exist after a partial run. Read the summary status and every stage,
+not just report.md. Raw diagnostics are in that run's logs; Docker service logs
+are available through `docker compose logs --tail 80 ui demo-full juice-shop`.
+Never paste `.env` or resolved Compose secrets into an issue.
 
 | Symptom | Diagnosis and remedy |
 | --- | --- |
@@ -13,7 +36,7 @@ Use `docker compose config --quiet`; plain config output expands secrets.
 | PowerShell scripts blocked | For this terminal only, if permitted by your organization's policy: `Set-ExecutionPolicy -Scope Process Bypass`; rerun bootstrap. |
 | Juice Shop unhealthy | `docker compose ps -a juice-shop`, `docker compose logs --tail 80 juice-shop`; healthcheck uses `/nodejs/bin/node`, not PATH lookup. Retry `docker compose up -d --wait --wait-timeout 180 juice-shop`. |
 | Port 3000 already in use | Stop the other application/container, or change only the host side of the Compose port mapping. Container target stays `http://juice-shop:3000`. |
-| Wrong architecture / exec format error | Inspect `docker image inspect ai-security-agent:0.3.2 --format '{{.Os}}/{{.Architecture}}'` and `docker info --format '{{.Architecture}}'`; rebuild for the host architecture. |
+| Wrong architecture / exec format error | Inspect `docker image inspect ai-security-agent:0.4.0 --format '{{.Os}}/{{.Architecture}}'` and `docker info --format '{{.Architecture}}'`; rebuild for the host architecture. |
 | Apple Silicon image issue | Use arm64 release/build; remove manual amd64 platform overrides. Check `docker buildx ls`. Both scanners must pass image build version checks. |
 | CRLF shell failure | Restore LF line endings with Git `.gitattributes`; a fresh clone honors them. Shell scripts need executable permissions (`chmod +x run.sh scripts/*.sh`). |
 | Bind mount permission denied | Linux wrappers use your UID/GID. Ensure your account owns `runs`, `logs`, `reports`; set AGENT_UID/AGENT_GID only if needed. Do not run scans as unrestricted root. Docker Desktop may require sharing the repository folder. |

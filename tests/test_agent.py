@@ -184,7 +184,7 @@ def test_normal_loop_and_reports(state, registry):
     assert len(state.findings) == 1 and state.findings[0].category == "configuration"
     assert state.findings[0].evidence == "private code"
     summary = json.loads((registry.paths.reports / "summary.json").read_text())
-    assert summary["status"] == "completed" and summary["version"] == "0.3.2"
+    assert summary["status"] == "completed" and summary["version"] == "0.4.0"
     assert summary["agent_steps"] == 6
     assert set(summary["llm_usage"]) == {"planner", "enrichment", "brief", "total"}
     trace = json.loads((registry.paths.reports / "agent_trace.json").read_text())

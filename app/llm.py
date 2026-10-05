@@ -228,12 +228,14 @@ class OpenAICompatibleClient:
         self.usage = LLMUsage()
         self.planner_usage = LLMUsage()
         self.brief_usage = LLMUsage()
+        self.chat_usage = LLMUsage()
 
     def usage_for(self, role: str) -> LLMUsage:
         return {
             "planner": self.planner_usage,
             "enrichment": self.usage,
             "brief": self.brief_usage,
+            "chat": self.chat_usage,
         }[role]
 
     @property
@@ -261,7 +263,7 @@ class OpenAICompatibleClient:
     ) -> httpx.Response:
         last_error: Exception | None = None
         # Planner retries are owned by the bounded agent loop, not hidden here.
-        retries = 0 if role == "planner" else MAX_RETRIES
+        retries = 0 if role in ("planner", "chat") else MAX_RETRIES
         for attempt in range(retries + 1):
             try:
                 with httpx.Client(

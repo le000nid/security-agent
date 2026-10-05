@@ -53,6 +53,8 @@ def run(argv: list[str] | None = None) -> int:
         "agent",
         "doctor",
         "latest",
+        "ui",
+        "benchmarks",
         "--version",
         "--help",
         "-h",

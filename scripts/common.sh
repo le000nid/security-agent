@@ -24,11 +24,8 @@ ensure_image() {
   fi
 }
 agent_image() {
-  local candidate
-  while IFS= read -r candidate; do
-    case "$candidate" in bkimminich/juice-shop:*) ;; *) printf '%s\n' "$candidate"; return ;; esac
-  done < <(docker compose --profile agent config --images)
+  docker compose --profile agent config --images agent
 }
 start_lab() {
-  docker compose up -d --wait --wait-timeout 180 juice-shop || fail 'Juice Shop unhealthy. Check port 3000 and docker compose logs juice-shop.'
+  docker compose up -d --wait --wait-timeout 180 juice-shop demo-full || fail 'Benchmark unhealthy. Check ports 3000/3001 and docker compose logs juice-shop demo-full.'
 }

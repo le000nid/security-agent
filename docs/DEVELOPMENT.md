@@ -1,4 +1,4 @@
-# Development — 0.3.2
+# Development — 0.4.0
 
 Normal users need only Docker. For native development use Python 3.11+:
 
@@ -38,7 +38,7 @@ Linux and macOS, plus Linux multi-architecture builds and a no-LLM lab smoke run
 
 ```text
 docker compose config --quiet
-docker build -t ai-security-agent:0.3.2 .
+docker build -t ai-security-agent:0.4.0 .
 docker buildx build --platform linux/amd64,linux/arm64 --output type=cacheonly .
 ```
 
@@ -56,3 +56,48 @@ The v0.3.2 `enrichment.py` isolates errors without changing Finding identity.
 `brief.py` owns the strict read-only synthesis contract and minimized input.
 Add tests to `test_brief_and_enrichment.py` using mocked compatible HTTP responses;
 never use a real provider key or enable doctor --check-llm in automated checks.
+
+## Add a benchmark (no Chat prompt edits)
+
+1. Add reviewed source/runtime fixtures under `targets/<id>`. Unsafe examples
+   must never execute on startup or HTTP requests. Keep benign controls too.
+2. Add a strict entry to `config/benchmarks.yaml`: lowercase ID, capabilities,
+   `/targets/...` source for SAST, local service URL for DAST, optional baseline.
+   Runtime source validation rejects missing or escaping paths. Registry config
+   is trusted code-review input, never user/LLM-editable HTTP data.
+3. For DAST add a non-root Compose service, loopback-only host publishing and a
+   deterministic healthcheck. Never mount the Docker socket. Update host startup
+   helpers to start the service. Register only a service you own in this lab.
+4. Add `config/expected/<id>.json` when stable controlled expectations exist;
+   keys are tool/title/source/category. Keep the historical nine-finding
+   `benchmark/expected_findings.json` sample baseline in sync with its registry
+   copy. Do not label these metrics real-world security accuracy.
+5. Add registry/default-mode/rejection/service/UI tests. UI selections and Chat
+   metadata are generated from the registry; no manually hardcoded prompt list.
+6. Rebuild, run doctor, opt-in `doctor --check-benchmarks`, then a no-LLM smoke.
+   Verify same-application claims only for deliberately corresponding fixtures.
+
+## UI and test seams
+
+`create_app(service=..., runs_dir=..., llm=...)` supports injected dependencies.
+Use ASGI TestClient with base URL `http://localhost` so the Host boundary stays
+enabled. Obtain the CSRF token from `/` and submit `X-CSRF-Token` for every POST.
+Production errors never expose Pydantic input values or exception tracebacks.
+Never add a provider check merely to load a page. Windows asyncio creates a
+stdlib loopback socketpair internally; the test network guard permits exactly
+that call site, not arbitrary localhost or external connections.
+
+The UI server uses one process/worker: multiple Uvicorn workers would create
+independent locks and CSRF tokens, and are unsupported. Job snapshots are copies;
+events are bounded; reports are the only persistent record. Test concurrency
+with events/barriers, not real scans or provider requests.
+
+## Clean release archive
+
+Review and commit changes first, then run `scripts/package.ps1` or
+`scripts/package.sh`. Both require committed HEAD version 0.4.0 and no tracked
+diff, check secret-like tracked filenames, and call git archive. `.gitattributes`
+excludes runtime/caches/secrets/ZIPs; untracked files are not archived. Scripts
+refuse to overwrite an existing output. The workflow does not detect credentials
+embedded in ordinary source files: review content before committing. Local build
+does not authorize a commit, push, GitHub release or image publication.

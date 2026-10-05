@@ -1,0 +1,23 @@
+- id: sample-sast
+  name: Sample SAST
+  description: Curated Python and JavaScript source fixtures; nine expected Semgrep findings.
+  capabilities: [sast]
+  source_path: /targets/sample-app
+  expected_findings: sample-sast.json
+  tags: [educational, source-only]
+- id: juice-shop
+  name: OWASP Juice Shop
+  description: Local HTTP training target; matching source is not bundled. DAST only.
+  capabilities: [dast]
+  target_url: http://juice-shop:3000
+  docker_service: juice-shop
+  tags: [educational, http]
+- id: demo-full
+  name: Demo Full
+  description: Same-project source and HTTP service with safe, deterministic configuration indicators.
+  capabilities: [sast, dast]
+  source_path: /targets/demo-full
+  target_url: http://demo-full:3000
+  docker_service: demo-full
+  expected_findings: demo-full.json
+  tags: [educational, same-application, curated]

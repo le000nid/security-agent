@@ -12,6 +12,7 @@ from app.agent.validator import STAGES, ActionValidator
 from app.brief import generate_ai_brief
 from app.config import Settings
 from app.enrichment import enrich_independently
+from app.events import Observer
 from app.llm import OpenAICompatibleClient
 from app.llm_output import LLMError
 from app.nuclei import run_nuclei
@@ -42,8 +43,10 @@ class ToolRegistry:
         include_evidence: bool = False,
         batch_size: int = 1,
         settings: Settings | None = None,
+        observer: Observer | None = None,
     ):
         self.paths, self.client = paths, client
+        self.observer = observer
         self.include_evidence, self.batch_size = include_evidence, batch_size
         self.settings = settings or Settings()
         self.tools = MappingProxyType(

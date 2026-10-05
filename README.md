@@ -1,37 +1,59 @@
-# AI Security Agent 0.3.2
+# AI Security Agent 0.4.0
 
-## Two independent choices
+A local educational AI-assisted application security analysis platform.
+Semgrep analyzes source code; Nuclei performs reviewed, low-impact HTTP checks.
+Use the CLI or the local Web UI. AI is optional: the complete scanner-only demo
+works without a provider account or Internet access once images are available.
 
-| Choice | Values | Meaning |
+This is a training harness, not an autonomous pentester or security certification.
+Intentionally vulnerable fixtures must never be deployed publicly.
+
+## Scope and orchestration are separate
+
+| Choice | Options | Meaning |
 | --- | --- | --- |
-| Scan scope (`--mode`) | `sast` / `dast` / `full` | What to analyze |
-| Orchestration (subcommand) | `scan` / `agent` | Who selects the next approved action |
+| Scope (`--mode`) | sast / dast / full | Source, HTTP, or both |
+| Orchestration | scan / agent | Fixed sequence, or validated AI choice |
+| AI analysis | enabled / `--no-llm` | Enrichment and AI Security Brief |
 
-SAST = Semgrep analyzes source code. DAST = Nuclei checks a running HTTP
-application. FULL includes both SAST and DAST. SCAN is a deterministic Python
-workflow. AGENT lets the LLM Planner choose between multiple currently valid,
-approved actions. **Agent mode is not required to run both scanners.**
+`scan --mode full --no-llm` runs both scanners without any LLM request.
+`agent` requires LLM access. Its primary meaningful choice today is which
+scanner runs first in FULL mode; later single-option actions are automatic,
+not extra Planner requests. `deterministic` remains an alias for `scan`.
 
-This is an educational, local-only security testing harness, not an automated
-pentester. The current agent is a controlled planning runtime, not yet an interactive chat interface.
+## Built-in benchmarks
 
-## Prerequisites and supported hosts
+| ID | Default scope | Source / service | Curated baseline |
+| --- | --- | --- | --- |
+| sample-sast | SAST | `/targets/sample-app` | Nine Semgrep findings |
+| juice-shop | DAST | `http://juice-shop:3000` | No fixed acceptance baseline |
+| demo-full | FULL | `/targets/demo-full` and `http://demo-full:3000` | Four SAST + three DAST indicators |
 
-Normal Docker usage requires Git, Docker and Docker Compose v2. You do **not**
-need host Semgrep, Nuclei, Go, Python or Python dependencies.
+The registry is reviewed static `config/benchmarks.yaml`, validated with Pydantic.
+Juice Shop has no bundled matching source, so SAST/FULL selection is rejected.
+Demo Full's source mount and running server belong to the **same project**.
+Its standard-library HTTP server serves constant text; wildcard CORS, missing
+CSP and missing Referrer-Policy are deliberate configuration indicators.
+Source-only shell/pickle/debug/secret examples are never imported by the server.
+Coverage is curated local benchmark coverage, not real-world detection accuracy.
 
-| Host | Docker runtime | Image architecture |
-| --- | --- | --- |
-| Windows 10/11 x64 | Docker Desktop with Linux containers | amd64 |
-| Linux | Docker Engine + Compose v2 | amd64 / arm64 |
-| macOS Intel | Docker Desktop | amd64 |
-| macOS Apple Silicon | Docker Desktop | arm64 |
+Juice Shop is pinned to the verified official `bkimminich/juice-shop:v20.2.0`
+tag. Demo Full uses `python:3.11.14-slim-bookworm`. Tags are not immutable
+digests; changing source, templates or images may change results.
 
-Images are intended for Linux amd64 and arm64. Builds check both scanner binaries.
-Use your native architecture; do not force amd64 on Apple Silicon unnecessarily.
-The lab binds port 3000 only on the host loopback interface.
+## Requirements
 
-## First run — Windows PowerShell
+Git, Docker Desktop with Linux containers (Windows/macOS), or Docker Engine
+with Compose v2 (Linux). Normal Docker usage needs **no host Python, scanners,
+Go, Node or frontend build tool**. Keep adequate Docker disk space available.
+Python 3.11+ is only needed for native development.
+
+Linux amd64/arm64 images and Windows/Linux/macOS test jobs are configured in CI.
+Do not interpret CI configuration as physical macOS/Apple Silicon validation.
+Linux wrappers map your UID/GID for writable reports; never make the Docker
+socket world-writable.
+
+## Quick start — Windows PowerShell
 
 Start Docker Desktop, then:
 
@@ -40,53 +62,114 @@ git clone https://github.com/le000nid/security-agent.git
 cd security-agent
 .\scripts\bootstrap.ps1
 .\scripts\doctor.ps1
+.\run.ps1 benchmarks
+.\run.ps1 scan --benchmark demo-full --mode full --no-llm
+.\run.ps1 latest
+.\run.ps1 ui
 ```
 
-If script execution is blocked and your organization's policy permits it, use
-`Set-ExecutionPolicy -Scope Process Bypass` in this terminal only. Do not
-permanently disable PowerShell security policies.
+Open [AI Security Agent UI](http://127.0.0.1:8080).
+Lab browser addresses: [Juice Shop](http://127.0.0.1:3000) and
+[Demo Full](http://127.0.0.1:3001).
 
-Bootstrap creates runtime directories, copies `.env.example` only if `.env`
-does not already exist, builds the agent (or pulls `AGENT_IMAGE`), starts Juice
-Shop, waits for health, and runs a deterministic full smoke scan with `--no-llm`.
-It never overwrites an existing `.env` or calls an LLM.
+If PowerShell script execution is blocked, follow your organization's policy.
+A process-scoped execution-policy exception is preferable to permanent changes.
 
-Doctor checks Docker/Compose, architecture, image, tools, rules, writable report
-paths, the sample source mount, Juice Shop DNS/reachability and configuration.
-Default doctor never contacts the LLM API and never prints the key.
-
-Open the lab in a browser at [localhost:3000](http://localhost:3000).
-Inside the agent container, use `http://juice-shop:3000`: container localhost
-means the agent itself, not Juice Shop.
-
-## First run — Linux
+## Quick start — Linux / macOS
 
 ```bash
 git clone https://github.com/le000nid/security-agent.git
 cd security-agent
 ./scripts/bootstrap.sh
 ./scripts/doctor.sh
+./run.sh benchmarks
+./run.sh scan --benchmark demo-full --mode full --no-llm
+./run.sh latest
+./run.sh ui
 ```
 
-Docker should be usable by your current account. Diagnose permission errors with
-`docker info` and your installation's Docker access configuration; do not use
-`chmod 777` on the Docker socket or run the scanner as unrestricted root.
-Linux wrappers map your UID/GID for writable bind mounts. Docker group membership
-grants powerful host access; follow your administrator's policy.
+Bootstrap preserves an existing `.env`, otherwise copies `.env.example`;
+creates runs/logs/reports; validates Docker; builds the agent or pulls
+`AGENT_IMAGE`; starts Juice Shop and Demo Full; waits for health; runs all
+three registered demos without LLM. It never installs Docker or contacts an LLM.
+First image build needs network access. Subsequent scans use local rules/assets.
 
-## First run — macOS Intel / Apple Silicon
+`ui` starts bundled lab services and the long-running UI service. The browser
+process itself has no Docker socket and never starts containers. Stop only the
+UI with `docker compose --profile ui stop ui`. To stop the whole lab:
+`docker compose --profile ui --profile agent down` (reports remain on the host).
 
-Install and start Docker Desktop, then:
+## Guided Scan walkthrough
 
-```bash
-git clone https://github.com/le000nid/security-agent.git
-cd security-agent
-./scripts/bootstrap.sh
-./scripts/doctor.sh
+1. Select **Demo Full**, scope **FULL**.
+2. Choose **Standard Scan**, leave **Enable AI** unchecked.
+3. Click **Start Analysis** and follow stage progress.
+4. Open results: severity counts, stages, warnings, curated baseline, findings.
+5. Filter findings by severity/source/category; open one for evidence,
+   description and recommendation. Read/download the plain-text Markdown report.
+
+AI Agent is disabled until AI is enabled. Tone professional/concise/funny and
+language ru/en apply to the brief, not scanner evidence. Evidence transmission
+is a separate opt-in. A failed provider must not erase scanner results.
+
+**Runs** reads persisted reports (including v0.3 runs), newest first, at most
+500 entries. Malformed histories are skipped. It is not a database.
+One UI scan job is allowed at a time; a second start returns
+`scan_already_running`. The last 50 jobs and 100 events/job are in memory.
+A UI restart loses job handles; check Runs for surviving reports. Do not restart
+during a scan: background work is not a durable queue. Separate CLI processes
+are not governed by the UI's in-process lock.
+
+## Chat: fixed operations, not a shell
+
+Quick actions work without an LLM: Help, Benchmarks, Latest run, Findings, High
+findings, Report, Summary. Supported deterministic phrases include:
+
+- “Какие стенды доступны?”
+- “Проверь demo-full полностью” — starts Standard Scan FULL, AI off.
+- “Покажи high”
+- “Какая находка самая серьёзная?” — explains the highest-ranked stored finding.
+- “Покажи последний отчёт”
+
+“Explain this finding in Chat” supplies the selected run/finding ID.
+Unqualified “Объясни эту находку” falls back to the highest-severity finding
+of the latest readable run. It does not infer a hidden conversational selection.
+Explanations reuse stored descriptions/recommendations/rationale. Summaries reuse
+the saved brief or deterministic counts. Neither action reruns scanners.
+
+Free-form parsing requires an explicit successful **Check LLM connectivity**.
+This button performs model discovery only. A failed parse/check latches
+unavailable until another explicit check; no repeated provider outage loop.
+Only the current message plus compact registry/latest-run metadata are sent.
+Chat history is limited to 30 displayed messages in the tab, not persisted in
+reports and never fed to the Planner.
+
+Chat's strict intent enum is HELP, LIST_BENCHMARKS, START_SCAN, SHOW_LATEST_RUN,
+SHOW_RUN, SHOW_FINDINGS, SHOW_REPORT, EXPLAIN_FINDING, SUMMARIZE_RUN.
+Extra commands, URLs, paths, services and scanner arguments are rejected.
+Chat is a controller above RunService; Planner selects approved actions *within*
+a run. Neither role can expand the target allowlist or execute arbitrary shell.
+
+## LLM unavailable / offline demo
+
+```powershell
+.\run.ps1 scan --benchmark demo-full --mode full --no-llm
 ```
 
-The commands are identical for Intel (amd64) and Apple Silicon (arm64).
-Build locally if no compatible published image is available.
+Semgrep, Nuclei, normalization, baseline evaluation, findings, summary and report
+remain available. Planner, enrichment, AI Security Brief and free-form AI parsing
+are unavailable. Skipped AI stages are expected, not a failure.
+Quick-action Chat and Guided Scan remain usable.
+
+When the provider is available, these are **manual opt-ins**, not test steps:
+
+```powershell
+.\scripts\doctor.ps1 --check-llm
+.\run.ps1 agent --benchmark demo-full --mode full
+```
+
+Linux/macOS equivalents are `./scripts/doctor.sh --check-llm` and
+`./run.sh agent --benchmark demo-full --mode full`.
 
 ## Optional LLM configuration
 
@@ -199,8 +282,7 @@ Strict output validation limits the headline, summary, up to five existing
 finding references, up to five next steps, limitations and closing line.
 Unknown and duplicate IDs are rejected. The brief is prompted not to invent
 vulnerabilities, claim unobserved exploitation or treat zero findings as proof
-of security. It also receives the warning that the educational FULL inputs are
-different applications. Prose accuracy still requires human review.
+of security. It receives trusted same-application metadata for demo-full, and warns about unverified correspondence for legacy direct inputs. Prose accuracy still requires human review.
 
 The brief is displayed near the top of report.md and saved in ai_brief.json.
 Console output shows only its headline/summary and report paths. If generation
@@ -234,361 +316,124 @@ Only the high-level AI Security Brief changes tone/language. Detailed findings
 remain technical and do not receive the humor instructions. Both settings are
 recorded as `report_tone` and `report_language` in summary.json.
 
-## Run SAST
+## CLI compatibility and target resolution
 
-Windows, scanner-only:
+```text
+security-agent benchmarks
+security-agent benchmarks list
+security-agent benchmarks show demo-full
+security-agent scan --benchmark sample-sast --no-llm
+security-agent scan --benchmark juice-shop --no-llm
+security-agent scan --benchmark demo-full --mode full --no-llm
+security-agent agent --benchmark demo-full --mode full
+security-agent doctor --check-benchmarks
+security-agent ui
+```
+
+Benchmark plus direct source/target is rejected. Unsupported scopes are rejected,
+not silently changed. Defaults derive from capabilities. Direct commands remain:
 
 ```powershell
 .\run.ps1 scan --mode sast --source-path /targets/sample-app --no-llm
-```
-
-Linux/macOS:
-
-```bash
-./run.sh scan --mode sast --source-path /targets/sample-app --no-llm
-```
-
-Controlled agent equivalents:
-
-```powershell
-.\run.ps1 agent --mode sast --source-path /targets/sample-app
-```
-
-```bash
-./run.sh agent --mode sast --source-path /targets/sample-app
-```
-
-Only SAST is in scope. There is no scanner-order choice, so the Planner needs
-zero completion calls; enrichment and the enabled AI brief still use the LLM.
-
-## Run DAST
-
-Windows, scanner-only:
-
-```powershell
 .\run.ps1 scan --mode dast --target-url http://juice-shop:3000 --no-llm
-```
-
-Linux/macOS:
-
-```bash
-./run.sh scan --mode dast --target-url http://juice-shop:3000 --no-llm
-```
-
-Controlled agent equivalents:
-
-```powershell
-.\run.ps1 agent --mode dast --target-url http://juice-shop:3000
-```
-
-```bash
-./run.sh agent --mode dast --target-url http://juice-shop:3000
-```
-
-Only DAST is in scope. The agent cannot choose SAST, replace the target, alter
-scanner arguments or add tools. Single-option stages are automatic, so Planner
-completion count is zero; enrichment and the enabled brief still make API requests.
-
-## Run FULL
-
-Deterministic Windows:
-
-```powershell
 .\run.ps1 scan --mode full --target-url http://juice-shop:3000 --source-path /targets/sample-app --no-llm
 ```
 
-Linux/macOS:
+The last legacy example analyzes **different applications**, which the report
+explicitly warns about. Direct inputs never claim same-application identity.
+Wrappers do not start DAST services for SAST-only scans, benchmarks, latest or
+default doctor. DAST/FULL/UI may start both local HTTP targets.
 
-```bash
-./run.sh scan --mode full --target-url http://juice-shop:3000 --source-path /targets/sample-app --no-llm
-```
+Native development: `python -m app.main scan ...` and
+`python -m app.main ui` (127.0.0.1:8080). Registry service names resolve inside
+Compose, not normally on the host; run benchmark-aware HTTP scans through Docker.
+Direct native DAST can use a loopback published port. Legacy flag-only invocation
+`python -m app.main --mode ...` retains its previous deterministic contract and
+root logs/reports paths. Use subcommands for v0.4 per-run artifacts.
 
-This runs **both Semgrep and Nuclei without an LLM Planner or any LLM calls**.
-Omit `--no-llm` to enable finding enrichment and the optional AI brief while retaining fixed
-Python scanner ordering. `deterministic` is an alias for `scan`.
+## Architecture and artifacts
 
-Controlled agent Windows:
-
-```powershell
-.\run.ps1 agent --mode full --target-url http://juice-shop:3000 --source-path /targets/sample-app
-```
-
-Linux/macOS:
-
-```bash
-./run.sh agent --mode full --target-url http://juice-shop:3000 --source-path /targets/sample-app
-```
-
-Initially both scanner actions may be valid; Planner may select SAST or DAST
-first. All later stages normally have only one allowed action, so the application
-selects them automatically. A successful normal full agent flow uses **one**
-Planner completion, plus separate enrichment and brief requests.
-
-### Important: the educational FULL example has two different subjects
-
-SAST analyzes `/targets/sample-app`, an intentionally vulnerable sample.
-DAST analyzes the running OWASP Juice Shop. These findings do **not** all belong
-to Juice Shop. Reports list SAST source and DAST target separately; the runtime
-cannot prove that arbitrary source and URL inputs correspond to the same app.
-
-For a true same-application scan, mount the source corresponding to your running
-target read-only. For example, put a matching checkout at `targets/juice-shop`
-(the Compose `./targets:/targets:ro` mount already exposes it), then use
-`--source-path /targets/juice-shop` with the matching local Juice Shop deployment.
-Do not mount your whole home directory or secrets. Rules are educational and
-language-specific; matching source does not guarantee comprehensive coverage.
-
-Wrappers provide default source and target when omitted and start the lab.
-Specify `--mode` explicitly to avoid surprises: with both default inputs and
-no mode, scope is full. Direct CLI use requires the relevant paths/URL.
-Legacy `python -m app.main --mode ...` remains deterministic and writes to
-root `logs/` and `reports/`; it retains the legacy enrichment contract. Use
-`scan`/`agent` subcommands for isolated per-run artifacts, resilient enrichment
-and the new AI brief.
-
-## What is the agent?
-
-The CLI supplies the scope; there is no conversation or interactive chat UI.
-The internal loop observes a minimized AgentState (availability, stage statuses,
-counts and allowed actions), not source files, URLs, raw logs or API keys.
-Planner selects between multiple approved actions; the validator remains
-authoritative. The fixed registry executes application-owned scanner commands,
-returns results to the state, and permits enrichment/reporting only when their
-preconditions hold. A future chat/UI could sit above this runtime.
-
-Approved actions are RUN_SAST, RUN_DAST, ENRICH_FINDINGS, GENERATE_AI_BRIEF,
-GENERATE_REPORT, FINISH.
-The model has no arbitrary shell access, cannot invent tools, change command
-lines, repeat completed/failed scanners or change scan targets.
-
-Agent step limits count executed actions. Planner limits count actual completion
-HTTP attempts, including failed requests; automatic transitions do not consume
-that budget. Three consecutive rejected/unavailable planner decisions terminate
-the run; a lower configured request budget terminates earlier. Planner transport
-has no hidden retry loop. Enrichment may retry timeout/429/5xx at most twice.
-Token counts come from provider usage when available, not local estimates.
-
-## Where reports are stored
+CLI / Guided Scan / Chat → strict RunRequest → RunService → deterministic loop
+or AgentState/Planner/Validator → fixed ToolRegistry → Semgrep/Nuclei → Findings
+→ optional enrichment → optional brief → shared reports.
+UI observes typed events, not console output, and never shells out to the CLI.
 
 ```text
-runs/
-  latest.json
-  <run_id>/
-    logs/
-      raw_semgrep.json
-      raw_nuclei.jsonl
-    reports/
-      findings.json
-      summary.json
-      report.md
-      agent_trace.json
-      ai_brief.json
+runs/<UTC timestamp>-<random suffix>/
+  logs/raw_semgrep.json
+  logs/raw_nuclei.jsonl
+  reports/findings.json
+  reports/summary.json
+  reports/report.md
+  reports/agent_trace.json
+  reports/ai_brief.json
+runs/latest.json
 ```
 
-| File | Contents |
-| --- | --- |
-| findings.json | Normalized machine-readable findings; no complete raw scanner records |
-| summary.json | Status, finish reason, stage statuses, counts, LLM metadata/usage and safe error codes |
-| report.md | Human-readable report, separate source/target and visible failure/partial status |
-| agent_trace.json | Sequence of decisions/actions, decision sources and safe diagnostics |
-| ai_brief.json | Validated structured brief, or a small failed/skipped/not_started status object |
-| raw_semgrep.json | Raw Semgrep JSON, only when that scanner ran |
-| raw_nuclei.jsonl | Raw Nuclei JSONL, only when that scanner ran |
+Raw scanner records stay in logs; normalized findings contain references only.
+Summary preserves version, status, stages, counts, warnings, planner usage,
+enrichment statistics and adds benchmark ID/name, mode, same-application flag,
+and optional baseline evaluation. Trace records short decisions, not provider
+chain-of-thought. AI brief is a validated object or a small skipped/failed status.
+`latest.json` points to the most recently started run. UI history reads summaries
+independently, including legacy runs with no benchmark metadata.
 
-Raw data stays in logs/. Findings refer to it rather than embedding it.
-Treat scanner logs, findings and short rationale as sensitive local artifacts.
-Application diagnostics are printed to the terminal (JSON logging); they are not
-a raw HTTP dump. No provider reasoning/chain-of-thought is persisted.
-`latest.json` points to the most recently **started** run, not necessarily the
-most recently finished one during concurrent runs.
+Report existence is not proof of success. Read summary.status and all stages:
+completed; completed_with_warnings (optional AI failed); or failed (partial work).
+Exit codes remain 0 success/warnings, 2 invalid input, 3 scanner failure,
+4 fatal agent LLM preflight, 5 planner failure/limit, 6 environment/report failure.
+The UI shows failed stages and preserved findings even after a partial run.
 
-### Open latest reports — Windows
+## Security boundaries
 
-```powershell
-.\run.ps1 latest
-$latest = Get-Content .\runs\latest.json | ConvertFrom-Json
-$run = ".\runs\$($latest.run_id)"
-Get-ChildItem "$run\reports"
-Get-Content "$run\reports\summary.json"
-Get-Content "$run\reports\agent_trace.json"
-Get-Content -Encoding UTF8 "$run\reports\ai_brief.json"
-notepad "$run\reports\report.md"
-explorer "$run\reports"
-```
+- Loopback host publishing only: 3000, 3001, 8080. Native UI defaults to loopback;
+  `--host 0.0.0.0` is for container-internal binding only. Never publish on a LAN.
+- HTTP scan hosts: localhost, 127.0.0.1, trusted static registry service hosts.
+  Public domains, IP ranges/lists, credentials, UNC source paths and 0.0.0.0 targets
+  are rejected. A configured HTTPS LLM provider is separate explicit egress.
+- UI/Chat accept benchmark IDs, never arbitrary targets/paths/flags.
+  Strict Pydantic contracts and application validation remain authoritative.
+- Fixed local scanner commands; no remote rules, DNS/network template sweep,
+  redirects, Interactsh, destructive operations, autofix or source execution.
+- UI has no Docker socket, runs non-root, drops capabilities and uses
+  no-new-privileges. Targets are read-only. No multi-user/authentication promise.
+- Same-origin CSRF token on every POST; Host/Origin checks, no CORS, CSP,
+  escaped templates and DOM textContent. Reports are served as plain text.
+  Download filenames are allowlisted; run IDs and filesystem containment checked.
+- LLM output is data. Secrets stay server-side; no keys/raw provider responses
+  appear in UI. Review findings/evidence before sharing local artifacts.
 
-### Open latest reports — Linux/macOS
+Local malware or another process under the same user is outside this trust
+boundary. Scanner findings may be false positives; AI prose may be wrong.
+Source/target equivalence is declared by reviewed registry configuration, not
+cryptographically proven. No cloud scanning, new scanners, accounts or database.
 
-```bash
-./run.sh latest
-ls -1 runs/
-# Copy the printed run ID into the following path:
-cat runs/<run_id>/reports/summary.json
-cat runs/<run_id>/reports/agent_trace.json
-cat runs/<run_id>/reports/ai_brief.json
-less runs/<run_id>/reports/report.md
-```
+## Development, packaging and troubleshooting
 
-Replace `<run_id>` before running these filesystem commands.
-No jq or host Python is needed. `latest` prints run ID, status and paths,
-without starting the lab or using an LLM. Container-relative `runs/` paths
-correspond to the repository's host `runs/` mount.
-
-## How to know whether a run succeeded
-
-Check **summary.json**, not just the existence of report.md. For a successful
-full run, `status=completed`, `finish_reason=completed`, SAST/DAST/report stages
-are completed, enrichment is completed or skipped, and ai_brief is completed
-or skipped. `llm_status=skipped` and `ai_brief_status=skipped`
-in scanner-only runs is expected.
-
-If enrichment or the brief fails, otherwise successful scanners/reporting yield
-`status=completed_with_warnings`, `finish_reason=completed_with_warnings`, exit 0.
-Check the enrichment counters/failures and ai_brief_status. A failed enrichment
-stage can coexist with a completed brief summarizing scanner-only findings.
-If a planner aborts, `status=failed` and finish_reason can be
-`planner_rejections_exhausted` or `agent_limit_reached`; scanner stages may be
-not_started. `outcome` mirrors the finish reason for convenient classification.
-`last_error_code`, `last_error`, stages and trace show what completed.
-Best-effort finalization can produce report.md even after failure; that file
-does **not** prove a complete full scan.
-
-Exit codes: 0 success, 2 invalid input/configuration, 3 scanner failure,
-4 fatal agent LLM preflight failure, 5 planner failure/limit,
-6 environment/report/precondition failure. Optional analysis warnings alone exit 0.
-The first failure retains its exit code; inspect all stages for later failures.
-
-### Reading the trace
-
-A normal full run follows RUN_SAST → RUN_DAST → ENRICH_FINDINGS →
-GENERATE_AI_BRIEF → GENERATE_REPORT → FINISH, or the reverse scanner order.
-That is six executed actions and normally one Planner completion. All five
-actions after the initial scanner choice use deterministic_single_option.
-
-- `decision_source=llm_planner`: model selected between multiple permitted options.
-- `decision_source=deterministic_single_option`: application selected the only
-  valid action, spending no Planner request.
-- `decision_source=deterministic`: fixed `scan` workflow, never Planner.
-- Rejected decisions appear as separate trace entries; `agent_steps` counts
-  executed actions, so trace length may be larger.
-
-JSON output accepts plain objects, surrounding whitespace, one JSON fenced
-block, or unambiguous plain prose around one object. Multiple objects, duplicate
-keys, malformed JSON and forbidden schema fields are rejected. Schema checks
-are not relaxed by extraction. Repair retries send a concise instruction, not
-accumulated provider responses.
-
-## Copy-paste verification checklist
-
-The agent and explicit LLM-check commands below are manual opt-ins to your
-configured provider; only execute them after configuring access.
-
-Windows:
-
-```powershell
-.\scripts\bootstrap.ps1
-.\scripts\doctor.ps1
-.\scripts\doctor.ps1 --check-llm
-.\run.ps1 scan --mode dast --no-llm
-.\run.ps1 agent --mode dast --target-url http://juice-shop:3000
-.\run.ps1 latest
-$latest = Get-Content .\runs\latest.json | ConvertFrom-Json
-Get-Content ".\runs\$($latest.run_id)\reports\summary.json"
-Get-Content ".\runs\$($latest.run_id)\reports\agent_trace.json"
-Get-Content -Encoding UTF8 ".\runs\$($latest.run_id)\reports\ai_brief.json"
-.\run.ps1 agent --mode full --target-url http://juice-shop:3000 --source-path /targets/sample-app
-.\run.ps1 latest
-$latest = Get-Content .\runs\latest.json | ConvertFrom-Json
-Get-Content ".\runs\$($latest.run_id)\reports\summary.json"
-Get-Content ".\runs\$($latest.run_id)\reports\agent_trace.json"
-Get-Content -Encoding UTF8 ".\runs\$($latest.run_id)\reports\ai_brief.json"
-notepad ".\runs\$($latest.run_id)\reports\report.md"
-```
-
-Linux/macOS:
-
-```bash
-./scripts/bootstrap.sh
-./scripts/doctor.sh
-./scripts/doctor.sh --check-llm
-./run.sh scan --mode dast --no-llm
-./run.sh agent --mode dast --target-url http://juice-shop:3000
-./run.sh latest
-# Inspect the summary.json and agent_trace.json paths printed above.
-./run.sh agent --mode full --target-url http://juice-shop:3000 --source-path /targets/sample-app
-./run.sh latest
-# Inspect the new summary, trace, ai_brief.json and report.md before judging success.
-```
-
-For automated offline development checks (Python 3.11+):
-
-```bash
-python -m pip install -r requirements.txt -r requirements-dev.txt
+```text
+python -m pip install -r requirements.txt
+python -m pip install -r requirements-dev.txt
 python -m pytest -q
 python -m ruff check .
 python -m ruff format --check .
 docker compose config --quiet
 ```
 
-Tests mock all provider HTTP access and guard against real network connections.
+Tests mock provider access. Never run real completion/model-discovery calls in CI.
+Doctor checks tools, writable runs, local rules, registry and source directories;
+only `--check-benchmarks` probes registered HTTP targets, and only
+`--check-llm` contacts the provider.
 
-## Expected educational baseline
-
-The intentionally vulnerable sample has historically produced nine SAST findings.
-The tested Juice Shop version produced around three low/info configuration
-findings. These are not acceptance thresholds: exact results depend on source,
-target version and rules. Juice Shop still uses the upstream `latest` tag,
-so DAST counts can change. Passing tests is not a security certification.
-
-## Troubleshooting
-
-Start with doctor and see [full troubleshooting](docs/TROUBLESHOOTING.md).
-
-| Symptom | First check |
-| --- | --- |
-| Docker daemon unavailable | Start Docker Desktop/service; run `docker info` |
-| Compose unavailable | `docker compose version`; use Compose v2 |
-| Juice Shop unhealthy | `docker compose ps -a juice-shop` and `docker compose logs --tail 80 juice-shop` |
-| Port conflict | Free host port 3000 or change only the host-side mapping |
-| Permission denied | Check Docker access and ownership of runs/logs/reports; no world-writable socket |
-| Shell script CRLF | Fresh Git checkout honors .gitattributes; keep shell files LF and executable |
-| Wrong architecture | Inspect image/engine architecture and rebuild for amd64 or arm64 |
-| LLM 401/403 | Check credentials/access locally; never paste the key into diagnostics |
-| Model ID not found | Check exact ID using opt-in doctor model discovery |
-| Planner invalid response | Inspect trace error_code, summary last_error and terminal application logs |
-| Enrichment validation failure | Inspect those same files; original scanner findings are preserved |
-| Report exists but status failed | Check finish_reason and each stage, not merely file existence |
-
-Planner errors distinguish HTTP, timeout, rate limiting, empty/truncated content,
-JSON parsing, schema validation, unknown actions and actions not currently
-allowed. Enrichment also distinguishes invalid category, identity mismatch and
-missing/extra/duplicate batch IDs. Safe diagnostic messages omit model input
-values and HTTP response bodies. Generic unexpected exceptions remain sanitized.
-
-## Security model and limitations
-
-Targets are limited to `localhost`, `127.0.0.1` and `juice-shop`; `0.0.0.0`
-and arbitrary Internet scan targets are forbidden. Target/source validation is
-authoritative and rechecked before dispatch. Source must be a permitted local
-path, not a root/UNC/network path. The configured HTTPS LLM API is a separate,
-explicit outbound connection, not a scan target.
-
-Only registered tools run. Nuclei uses reviewed local low-impact HTTP templates,
-without unrelated DNS/network templates, redirects, Interactsh or updates.
-Semgrep uses local rules without cloud rules, autofix or source execution.
-No exploit or destructive workflow is added.
-
-LLM output is data, never shell commands or executable code. Strict schemas and
-the registry prohibit model-provided tool arguments. Enrichment updates only
-description, normalized category, severity and recommendation of existing
-findings; identity, scanner category, location, evidence and count stay fixed.
-Rationale is separate metadata. Evidence transmission is off by default; enable
-`--include-evidence-in-llm` only after reviewing privacy implications.
-Provider reasoning is ignored and API keys are not written to reports.
-Prompts and the narrow CORS/Referrer-Policy regression guards are not proof of factual accuracy:
-review enrichment prose before relying on it.
+After reviewing and committing the release, `scripts/package.ps1` or
+`scripts/package.sh` creates `dist/security-agent-v0.4.0.zip` using git archive
+of clean committed HEAD. Untracked files are never included; tracked secret-like
+filenames cause failure. Export rules exclude runtime directories, .env, caches
+and archives. Scripts refuse to overwrite an existing release archive.
+This is not a secret-content scanner: review committed text before release.
+Do not commit credentials just to make packaging succeed.
 
 See [architecture](docs/ARCHITECTURE.md), [development](docs/DEVELOPMENT.md),
-[rules and tools](docs/tools.md) and [validation record](docs/VALIDATION.md).
-Optional `AGENT_IMAGE=ghcr.io/owner/repository:0.3.2` selects a published image;
-otherwise bootstrap builds locally. Release publication needs repository
-permissions and is not required for local usage.
+[troubleshooting](docs/TROUBLESHOOTING.md), [rules/tools](docs/tools.md) and
+[validation record](docs/VALIDATION.md). Optional
+`AGENT_IMAGE=ghcr.io/owner/repository:0.4.0` selects your published image;
+otherwise bootstrap builds locally.

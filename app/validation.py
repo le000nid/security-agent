@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
-ALLOWED_HOSTS = frozenset({"localhost", "127.0.0.1", "juice-shop"})
+ALLOWED_HOSTS = frozenset({"localhost", "127.0.0.1"})
 ALLOWED_SCHEMES = frozenset({"http", "https"})
 
 
@@ -14,6 +14,14 @@ class TargetValidationError(ValueError):
 
 def validate_target_url(value: str) -> str:
     """Validate and normalize a URL for an explicitly allowed local host."""
+    from app.benchmarks import BenchmarkRegistry
+
+    return _validate_target_url(
+        value, ALLOWED_HOSTS | BenchmarkRegistry.load().trusted_hosts()
+    )
+
+
+def _validate_target_url(value: str, allowed_hosts: set[str] | frozenset[str]) -> str:
 
     candidate = value.strip()
     if any(ord(c) < 33 for c in candidate) or any(c in candidate for c in "\\,"):
@@ -30,8 +38,8 @@ def validate_target_url(value: str) -> str:
         raise TargetValidationError("Target URL must use http or https")
     if not parsed.hostname:
         raise TargetValidationError("Target URL must include a hostname")
-    if parsed.hostname.lower() not in ALLOWED_HOSTS:
-        allowed = ", ".join(sorted(ALLOWED_HOSTS))
+    if parsed.hostname.lower() not in allowed_hosts:
+        allowed = ", ".join(sorted(allowed_hosts))
         raise TargetValidationError(
             f"Target host is not allowed; use one of: {allowed}"
         )

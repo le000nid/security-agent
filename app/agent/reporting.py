@@ -7,8 +7,10 @@ from app import __version__
 from app.agent.models import AgentState, Status
 from app.parser import save_findings
 from app.report import _inline, generate_markdown_report
+from app.resources import config_directory
 from app.runs import RunPaths
 from app.safe_logging import redact, redact_data
+from benchmark.evaluator import evaluate
 
 
 def write_reports(
@@ -23,6 +25,10 @@ def write_reports(
     summary = {
         "version": __version__,
         "run_id": state.run_id,
+        "benchmark_id": state.benchmark_id,
+        "benchmark_name": state.benchmark_name,
+        "mode": state.mode,
+        "same_application": state.same_application,
         "orchestration": state.orchestration,
         "target_url": state.target_url,
         "source_path": state.source_path,
@@ -70,6 +76,24 @@ def write_reports(
             for name in ("sast", "dast", "enrichment", "ai_brief", "report")
         },
     }
+    if state.benchmark_expected:
+        expected = json.loads(
+            (config_directory() / "expected" / state.benchmark_expected).read_text(
+                encoding="utf-8"
+            )
+        )
+        sources = (
+            {"SAST"}
+            if state.mode == "sast"
+            else {"DAST"}
+            if state.mode == "dast"
+            else {"SAST", "DAST"}
+        )
+        summary["benchmark_evaluation"] = evaluate(
+            [f.model_dump() for f in state.findings],
+            [f for f in expected if f["source"] in sources],
+            benchmark_id=state.benchmark_id,
+        )
     (paths.reports / "summary.json").write_text(
         json.dumps(redact_data(summary), indent=2), encoding="utf-8"
     )
@@ -99,12 +123,17 @@ def write_reports(
         else "RUNNING"
     )
     scope = [
+        f"Benchmark: {_inline(state.benchmark_name or 'legacy direct input')} ({_inline(state.benchmark_id or 'unregistered')}); mode: {_inline(state.mode or 'legacy')}",
         f"Run status: **{status}**",
         f"SAST source: {_inline(state.source_path or 'not configured')} (stage: {state.sast_status.value})",
         f"DAST target: {_inline(state.target_url or 'not configured')} (stage: {state.dast_status.value})",
         "Stages: " + ", ".join(f"{k}={v}" for k, v in summary["stages"].items()),
     ]
-    if state.source_path and state.target_url:
+    if state.same_application:
+        scope.append(
+            "SAST and DAST correspond to the same application project in the trusted benchmark registry."
+        )
+    elif state.source_path and state.target_url:
         scope.append(
             "Source and HTTP target are independent inputs; their application identity is not verified. The default sample-app source and Juice Shop target are different applications."
         )

@@ -26,6 +26,18 @@ def execute_action(
     registry: ToolRegistry,
     decision_source: str = "deterministic",
 ) -> None:
+    from app.events import RunEvent, emit
+
+    emit(
+        registry.observer,
+        RunEvent(
+            event="stage_started",
+            run_id=state.run_id,
+            action=action.value,
+            status="running",
+            findings_count=len(state.findings),
+        ),
+    )
     if action == Action.FINISH:
         state.finished = True
         state.finish_reason = (
@@ -45,9 +57,30 @@ def execute_action(
                 status="completed",
             )
         )
+        emit(
+            registry.observer,
+            RunEvent(
+                event="stage_completed",
+                run_id=state.run_id,
+                action=action.value,
+                status="completed",
+                findings_count=len(state.findings),
+            ),
+        )
         return
     result = registry.execute(action, state)
     apply_result(state, result)
+    emit(
+        registry.observer,
+        RunEvent(
+            event="stage_completed" if result.success else "stage_warning",
+            run_id=state.run_id,
+            action=action.value,
+            status=result.status.value,
+            findings_count=len(state.findings),
+            message=result.error_code,
+        ),
+    )
     sync_usage(state, registry)
     state.trace.append(
         TraceEntry(

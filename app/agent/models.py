@@ -97,6 +97,11 @@ class ToolResult(BaseModel):
 class AgentState(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, validate_assignment=True)
     run_id: str
+    mode: Literal["sast", "dast", "full"] | None = None
+    benchmark_id: str | None = None
+    benchmark_name: str | None = None
+    benchmark_expected: str | None = None
+    same_application: bool = False
     goal: str = "Analyze application security"
     target_url: str | None = None
     source_path: str | None = None

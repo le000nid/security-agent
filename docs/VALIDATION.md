@@ -1,4 +1,84 @@
-# v0.3.2 reliability and AI brief validation
+# v0.4.0 application validation
+
+Validated on 2026-10-05. No real LLM model discovery or completion requests were
+made; provider behavior was mocked. Existing `.env` and historical runs retained.
+
+| Check | Result |
+| --- | --- |
+| Windows / Python 3.12 full pytest | 368 passed |
+| Linux / Python 3.11 full pytest in agent image | 366 passed, 2 packaging tests skipped because Git is absent from the runtime image |
+| Ruff check / format --check | Passed on Windows and Linux; 63 Python files formatted |
+| PowerShell and Bash wrapper syntax | Passed |
+| PowerShell benchmarks / latest | Passed through real Compose |
+| Compose config --quiet | Passed, no expanded secrets printed |
+| Final agent/UI and demo-full images | Built, linux/amd64 |
+| Juice Shop | Official v20.2.0 tag resolved for amd64/arm64, pulled and healthy |
+| demo-full / ui | Healthy; UI /healthz returns 0.4.0 |
+| sample-sast smoke | 9 SAST, expected baseline 9/9 |
+| Juice Shop DAST smoke | 3 findings for this pinned version and current templates |
+| demo-full FULL smoke | 4 SAST + 3 DAST; baseline expected/detected 7/7, no missed/unexpected |
+| Scanner-only usage | Zero LLM requests/tokens; enrichment/brief skipped |
+| Browser Guided Scan | Created real FULL job, observed progress and 7 findings |
+| Browser filtering / history | HIGH filter showed 1/7; current and v0.3 histories readable after UI restart |
+| Browser Chat | Offline benchmark list and Russian demo-full FULL start completed; LLM remained unchecked |
+| Release scripts | Windows packaging tested in disposable Git repositories; runtime/untracked secrets excluded and tracked secret filename rejected |
+
+Run evidence:
+
+- CLI FULL: `runs/20261005T052230Z-92e80f1b3be7/`
+- Guided Scan FULL: `runs/20261005T052557Z-6adb20202e10/`
+- Sample SAST: `runs/20261005T052611Z-f791a6de1972/`
+- Juice Shop DAST: `runs/20261005T052616Z-53742aae30dc/`
+- Chat FULL: `runs/20261005T053135Z-e46cb5f409df/`
+- Screenshot: `.validation/v040-ui-results.jpg` (local QA artifact, not a release file).
+
+`benchmark.verify_run` independently accepted the final Chat run as a complete
+same-application FULL baseline with zero LLM requests. CI runs this verification
+after its real demo-full smoke, then checks UI health.
+
+## Engineering change map
+
+New modules: `benchmarks.py` (strict registry), `service.py` (shared run setup),
+`events.py` (typed observers), `jobs.py` (single-flight worker), `repository.py`
+(contained artifact reads), `chat.py` (intent controller), `web.py` (local API).
+New UI assets are under `app/ui/`; benchmark configuration/baselines under
+`config/benchmarks.yaml` and `config/expected/`; safe runtime/source fixtures under
+`targets/demo-full/`. Added `benchmark/verify_run.py`, release scripts and four
+v0.4 test modules (service, web/chat, regressions, packaging).
+
+Focused existing-code changes: CLI/dispatcher now expose benchmarks and UI;
+state/report/brief carry benchmark identity; loops emit observer events;
+transport has a separate bounded chat role; target validation accepts only
+trusted registry hosts; doctor no longer requires DAST by default; evaluator
+can include both tools while retaining its legacy Semgrep-only default.
+Scanner command construction and Planner/Validator semantics were preserved.
+
+Compose adds non-root demo-full and UI services, loopback port bindings, shared
+read-only targets and shared report mounts. Agent no longer depends on Juice
+Shop health for source-only scans. Wrappers/bootstrap support the new flows;
+README/architecture/development/troubleshooting explain offline operation and
+security boundaries. CI retains three host OSes and amd64/arm64 builds.
+
+## Limits and warnings
+
+No physical macOS/Apple Silicon validation, local arm64 rebuild, GitHub workflow
+execution or real provider validation is claimed for this release. Multiarch CI
+configuration is retained, not a statement that CI has already run. Local Docker
+validation was amd64. Semgrep emits its existing pkg_resources deprecation
+warning; Starlette's TestClient emits an httpx compatibility deprecation warning.
+Both suites pass; no new httpx2 runtime dependency was added just for the warning.
+
+An initial Docker pull failed when C: was full; the user freed space and restarted
+Docker Desktop. All successful checks above happened after recovery. No Docker
+prune or user-data deletion was performed.
+
+Jobs are single-process and non-resumable; history remains in files. UI is local
+single-user only. Chat explanations reuse stored analysis, not a new conversational
+LLM synthesis. Fixture metrics are not real-world accuracy. Release packaging
+requires clean committed v0.4 HEAD; the user's project was not committed/pushed
+and no release archive from its uncommitted checkout was published.
+
+## Previous v0.3.2 validation (historical)
 
 Validated on 2026-09-28 with no real DeepSeek/NSU model discovery or completion.
 All provider responses are mocked; tests prohibit real socket connections.
