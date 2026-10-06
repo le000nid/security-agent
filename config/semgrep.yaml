@@ -105,3 +105,12 @@ rules:
       category: code-injection
       confidence: HIGH
       recommendation: Replace eval with explicit parsing or direct application logic.
+  - id: javascript-sql-query-concatenation
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: SQL query is built with string concatenation and requires manual review.
+    pattern: $DB.query($LEFT + $RIGHT, ...)
+    metadata:
+      category: sql-injection
+      confidence: MEDIUM
+      recommendation: Use parameterized queries or prepared statements instead of concatenating values into SQL.

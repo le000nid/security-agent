@@ -269,6 +269,7 @@ def test_localized_ui_and_registry_metadata(web):
     assert all(b["description_ru"] for b in entries.values())
     assert entries["demo-full"]["baseline_count"] == 7
     assert entries["sample-sast"]["baseline_count"] == 9
+    assert entries["sast-contours"]["baseline_count"] == 1
     assert entries["juice-shop"]["baseline_count"] is None
 
 

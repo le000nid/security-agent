@@ -24,3 +24,11 @@
   docker_service: demo-full
   expected_findings: demo-full.json
   tags: [educational, same-application, curated]
+- id: sast-contours
+  name: SAST Vulnerability Contours
+  description: Curated source-only fixtures for SQL injection and future LFI/RFI SAST checks.
+  description_ru: Учебные исходники для проверки SAST-правил SQL Injection и последующего добавления LFI/RFI.
+  capabilities: [sast]
+  source_path: /targets/sast-contours
+  expected_findings: sast-contours.json
+  tags: [educational, source-only, sast, curated]

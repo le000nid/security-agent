@@ -51,7 +51,12 @@ def service(tmp_path, monkeypatch):
 
 def test_builtin_registry():
     registry = BenchmarkRegistry.load()
-    assert {b.id for b in registry.list()} == {"sample-sast", "juice-shop", "demo-full"}
+    assert {b.id for b in registry.list()} == {
+        "sample-sast",
+        "juice-shop",
+        "demo-full",
+        "sast-contours",
+    }
     assert registry.trusted_hosts() == {"juice-shop", "demo-full"}
     assert validate_target_url("http://demo-full:3000") == "http://demo-full:3000"
     assert Path(registry.get("demo-full").local_source()).is_dir()

@@ -1,0 +1,3 @@
+[
+  {"tool": "semgrep", "title": "javascript-sql-query-concatenation", "source": "SAST", "category": "sql-injection"}
+]
