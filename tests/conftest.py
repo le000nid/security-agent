@@ -16,7 +16,7 @@ def forbid_network(monkeypatch):
         caller = sys._getframe(1)
         if (
             caller.f_globals.get("__name__") == "socket"
-            and caller.f_code.co_name == "_fallback_socketpair"
+            and caller.f_code.co_name in {"socketpair", "_fallback_socketpair"}
             and len(_args) == 2
             and _args[1][0] in {"127.0.0.1", "::1"}
         ):
