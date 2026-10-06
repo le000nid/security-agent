@@ -1,0 +1,18 @@
+id: local-http-missing-referrer-policy
+info:
+  name: Missing Referrer-Policy header
+  author: ai-security-agent
+  severity: info
+  tags: headers,privacy
+  description: The HTTP response does not declare a Referrer-Policy header.
+  remediation: Select a Referrer-Policy that limits unnecessary URL disclosure.
+http:
+  - method: GET
+    path: ["{{BaseURL}}"]
+    redirects: false
+    matchers:
+      - type: word
+        part: header
+        words: ["Referrer-Policy:"]
+        case-insensitive: true
+        negative: true

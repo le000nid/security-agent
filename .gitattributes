@@ -1,0 +1,28 @@
+* text=auto
+*.sh text eol=lf
+*.py text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+Dockerfile text eol=lf
+*.ps1 text eol=crlf
+
+# Release archives contain reviewed source only, never local/runtime state.
+.git export-ignore
+.gitignore export-ignore
+.gitattributes export-ignore
+.env export-ignore
+.env.* export-ignore
+.env.example -export-ignore
+runs export-ignore
+logs export-ignore
+reports export-ignore
+__pycache__ export-ignore
+**/__pycache__ export-ignore
+.pytest_cache export-ignore
+.ruff_cache export-ignore
+.venv export-ignore
+.validation export-ignore
+dist export-ignore
+build export-ignore
+*.egg-info export-ignore
+*.zip export-ignore
