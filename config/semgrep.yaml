@@ -114,3 +114,23 @@ rules:
       category: sql-injection
       confidence: MEDIUM
       recommendation: Use parameterized queries or prepared statements instead of concatenating values into SQL.
+  - id: php-local-file-inclusion
+    languages: [php]
+    severity: WARNING
+    message: User-controlled input reaches a PHP include or require statement.
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET[...]
+          - pattern: $_POST[...]
+          - pattern: $_REQUEST[...]
+    pattern-sinks:
+      - pattern-either:
+          - pattern: include($PATH);
+          - pattern: include_once($PATH);
+          - pattern: require($PATH);
+          - pattern: require_once($PATH);
+    metadata:
+      category: local-file-inclusion
+      confidence: HIGH
+      recommendation: Do not build include paths from user input. Use a fixed allowlist of known local files.

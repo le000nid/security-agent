@@ -1,3 +1,14 @@
 [
-  {"tool": "semgrep", "title": "javascript-sql-query-concatenation", "source": "SAST", "category": "sql-injection"}
+  {
+    "tool": "semgrep",
+    "title": "javascript-sql-query-concatenation",
+    "source": "SAST",
+    "category": "sql-injection"
+  },
+  {
+    "tool": "semgrep",
+    "title": "php-local-file-inclusion",
+    "source": "SAST",
+    "category": "local-file-inclusion"
+  }
 ]

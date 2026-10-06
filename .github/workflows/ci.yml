@@ -60,8 +60,8 @@ jobs:
           summary = json.loads(summary_path.read_text(encoding="utf-8"))
           evaluation = summary["benchmark_evaluation"]
 
-          assert evaluation["expected_count"] == 1, evaluation
-          assert evaluation["detected_expected_count"] == 1, evaluation
+          assert evaluation["expected_count"] == 2, evaluation
+          assert evaluation["detected_expected_count"] == 2, evaluation
           assert evaluation["missed_findings"] == [], evaluation
           assert evaluation["unexpected_findings"] == [], evaluation
           assert evaluation["precision"] == 1.0, evaluation
