@@ -1,0 +1,20 @@
+id: local-http-missing-content-type-options
+info:
+  name: Missing X-Content-Type-Options header
+  author: ai-security-agent
+  severity: info
+  tags: headers,configuration
+  description: The HTTP response does not declare X-Content-Type-Options.
+  remediation: Configure X-Content-Type-Options to nosniff where appropriate.
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+    redirects: false
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "X-Content-Type-Options:"
+        case-insensitive: true
+        negative: true

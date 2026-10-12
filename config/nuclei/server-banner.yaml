@@ -1,0 +1,16 @@
+id: local-http-server-banner-disclosure
+info:
+  name: Server banner is disclosed
+  author: ai-security-agent
+  severity: info
+  tags: headers,information-disclosure
+  description: The response exposes a non-empty Server header that may reveal implementation details.
+  remediation: Minimize product and version details in the Server header where practical.
+http:
+  - method: GET
+    path: ["{{BaseURL}}"]
+    redirects: false
+    matchers:
+      - type: regex
+        part: header
+        regex: ["(?im)^server:[[:space:]]*[^[:space:]].*$"]

@@ -1,0 +1,18 @@
+id: local-http-missing-content-security-policy
+info:
+  name: Missing Content-Security-Policy header
+  author: ai-security-agent
+  severity: info
+  tags: headers,configuration
+  description: The HTTP response does not declare a Content-Security-Policy header.
+  remediation: Define a policy appropriate for the application and test it before enforcement.
+http:
+  - method: GET
+    path: ["{{BaseURL}}"]
+    redirects: false
+    matchers:
+      - type: word
+        part: header
+        words: ["Content-Security-Policy:"]
+        case-insensitive: true
+        negative: true
