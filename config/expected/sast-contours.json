@@ -10,5 +10,11 @@
     "title": "php-local-file-inclusion",
     "source": "SAST",
     "category": "local-file-inclusion"
+  },
+  {
+    "tool": "semgrep",
+    "title": "php-remote-file-inclusion",
+    "source": "SAST",
+    "category": "remote-file-inclusion"
   }
 ]

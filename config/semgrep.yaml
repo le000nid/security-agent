@@ -134,3 +134,20 @@ rules:
       category: local-file-inclusion
       confidence: HIGH
       recommendation: Do not build include paths from user input. Use a fixed allowlist of known local files.
+  - id: php-remote-file-inclusion
+    languages: [php]
+    severity: WARNING
+    message: PHP includes a remote HTTP(S) file. Review remote code trust and allow_url_include settings.
+    patterns:
+      - pattern-either:
+          - pattern: include("$URL");
+          - pattern: include_once("$URL");
+          - pattern: require("$URL");
+          - pattern: require_once("$URL");
+      - metavariable-regex:
+          metavariable: $URL
+          regex: (?i)^https?://
+    metadata:
+      category: remote-file-inclusion
+      confidence: HIGH
+      recommendation: Store executable PHP code locally and select modules from a fixed allowlist.
