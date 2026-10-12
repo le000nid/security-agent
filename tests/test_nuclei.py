@@ -41,7 +41,7 @@ def test_run_nuclei_fails_when_binary_is_missing(
 
 def test_all_curated_templates_are_local_http_gets() -> None:
     templates = sorted(TEMPLATE_DIRECTORY.glob("*.yaml"))
-    assert 5 <= len(templates) <= 10
+    assert 5 <= len(templates) <= 11
     for template in templates:
         text = template.read_text(encoding="utf-8")
         assert "http:" in text

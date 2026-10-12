@@ -1,0 +1,7 @@
+services:
+  nosqli-lab:
+    image: bkimminich/juice-shop:v20.2.0
+    environment:
+      NODE_CONFIG: '{"challenges":{"safetyMode":"disabled"}}'
+    ports:
+      - "127.0.0.1:3004:3000"

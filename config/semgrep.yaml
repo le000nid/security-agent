@@ -105,3 +105,26 @@ rules:
       category: code-injection
       confidence: HIGH
       recommendation: Replace eval with explicit parsing or direct application logic.
+
+  - id: javascript-nosqli-tainted-where
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: User-controlled input reaches a NoSQL $where expression.
+    mode: taint
+    pattern-sources:
+      - pattern: $REQ.params.$FIELD
+      - pattern: $REQ.query.$FIELD
+      - pattern: $REQ.body.$FIELD
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: |
+                  $COLLECTION.find({..., $where: $QUERY, ...}, ...)
+              - pattern: |
+                  $COLLECTION.findOne({..., $where: $QUERY, ...}, ...)
+          - focus-metavariable: $QUERY
+    metadata:
+      category: injection
+      confidence: MEDIUM
+      cwe: "CWE-943: Improper Neutralization of Special Elements in Data Query Logic"
+      recommendation: Validate input types and use field-based filters instead of constructing $where expressions.

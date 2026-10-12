@@ -51,8 +51,14 @@ def service(tmp_path, monkeypatch):
 
 def test_builtin_registry():
     registry = BenchmarkRegistry.load()
-    assert {b.id for b in registry.list()} == {"sample-sast", "juice-shop", "demo-full"}
-    assert registry.trusted_hosts() == {"juice-shop", "demo-full"}
+    assert {b.id for b in registry.list()} == {
+        "sample-sast",
+        "juice-shop",
+        "demo-full",
+        "nosqli-sast",
+        "nosqli-dast",
+    }
+    assert registry.trusted_hosts() == {"juice-shop", "demo-full", "nosqli-lab"}
     assert validate_target_url("http://demo-full:3000") == "http://demo-full:3000"
     assert Path(registry.get("demo-full").local_source()).is_dir()
     with pytest.raises(ValueError, match="benchmark_not_found"):

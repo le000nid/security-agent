@@ -24,3 +24,20 @@
   docker_service: demo-full
   expected_findings: demo-full.json
   tags: [educational, same-application, curated]
+
+- id: nosqli-sast
+  name: NoSQLi SAST fixtures
+  description: Source-only JavaScript fixtures for user-controlled $where expressions.
+  description_ru: Учебные примеры для SAST; два опасных запроса и два безопасных контрольных примера.
+  capabilities: [sast]
+  source_path: /targets/nosqli
+  tags: [educational, source-only, nosqli]
+
+- id: nosqli-dast
+  name: Juice Shop NoSQLi lab
+  description: Separate local Juice Shop instance with safety mode disabled for training.
+  description_ru: Отдельный учебный Juice Shop с отключённым защитным режимом. Проверка NoSQLi в отзывах.
+  capabilities: [dast]
+  target_url: http://nosqli-lab:3000
+  docker_service: nosqli-lab
+  tags: [educational, http, nosqli]
