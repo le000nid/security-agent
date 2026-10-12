@@ -15,8 +15,12 @@ def forbid_network(monkeypatch):
         # Permit only that stdlib implementation, not general localhost traffic.
         caller = sys._getframe(1)
         if (
-            caller.f_globals.get("__name__") == "socket"
-            and caller.f_code.co_name == "_fallback_socketpair"
+            caller.f_globals is vars(socket)
+            and caller.f_code
+            in {
+                getattr(getattr(socket, name, None), "__code__", None)
+                for name in ("socketpair", "_fallback_socketpair")
+            }
             and len(_args) == 2
             and _args[1][0] in {"127.0.0.1", "::1"}
         ):
