@@ -608,3 +608,9 @@ selected tone; ideally Planner requests=1 and failures=0. Content/provider
 failures remain possible and must be reported honestly. In the browser select
 that run, press **Обсудить этот запуск**, explicitly check Chat connectivity,
 and ask “Что здесь плохого и что исправлять первым?”. No scanner should rerun.
+
+## DAN training extension
+
+The `dan-lab` benchmark demonstrates SAST prompt-boundary review and DAST
+synthetic-marker disclosure without a real LLM. See [docs/DAN.md](docs/DAN.md)
+for setup, expected findings and limitations.

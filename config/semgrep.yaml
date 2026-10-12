@@ -105,3 +105,24 @@ rules:
       category: code-injection
       confidence: HIGH
       recommendation: Replace eval with explicit parsing or direct application logic.
+  - id: python-untrusted-system-prompt
+    mode: taint
+    languages: [python]
+    severity: WARNING
+    message: HTTP input reaches a privileged LLM message; review prompt injection risk.
+    pattern-sources:
+      - pattern-either:
+          - pattern: request.args.get(...)
+          - pattern: request.form.get(...)
+          - pattern: request.json.get(...)
+        exact: true
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: '{"role": "system", "content": $CONTENT}'
+              - pattern: '{"role": "developer", "content": $CONTENT}'
+          - focus-metavariable: $CONTENT
+    metadata:
+      category: prompt-injection
+      confidence: MEDIUM
+      recommendation: Keep privileged instructions constant; pass untrusted input as user data and validate outputs.

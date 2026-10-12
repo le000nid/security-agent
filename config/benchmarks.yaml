@@ -24,3 +24,14 @@
   docker_service: demo-full
   expected_findings: demo-full.json
   tags: [educational, same-application, curated]
+- id: dan-lab
+  name: DAN Lab (simulation)
+  description: Deterministic prompt injection simulation; no real LLM or provider calls.
+  description_ru: >-
+    Учебная имитация DAN: опасная передача ввода в системные инструкции и раскрытие тестового маркера. Реальная LLM не используется.
+  capabilities: [sast, dast]
+  source_path: /targets/dan-lab
+  target_url: http://dan-lab:3000
+  docker_service: dan-lab
+  expected_findings: dan-lab.json
+  tags: [educational, same-application, simulated-llm]

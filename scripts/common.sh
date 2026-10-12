@@ -27,5 +27,5 @@ agent_image() {
   docker compose --profile agent config --images agent
 }
 start_lab() {
-  docker compose up -d --wait --wait-timeout 180 juice-shop demo-full || fail 'Benchmark unhealthy. Check ports 3000/3001 and docker compose logs juice-shop demo-full.'
+  docker compose up -d --wait --wait-timeout 180 juice-shop demo-full dan-lab || fail 'Benchmark unhealthy. Check ports 3000/3001/3002 and docker compose logs juice-shop demo-full.'
 }

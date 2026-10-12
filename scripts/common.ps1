@@ -25,5 +25,5 @@ function Initialize-AgentImage {
     else { Invoke-Docker compose --profile agent pull agent }
 }
 function Start-Lab {
-    Invoke-Docker compose up -d --wait --wait-timeout 180 juice-shop demo-full
+    Invoke-Docker compose up -d --wait --wait-timeout 180 juice-shop demo-full dan-lab
 }

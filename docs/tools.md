@@ -5,7 +5,7 @@ educational signal set, not a replacement for a security assessment.
 
 ## Nuclei DAST templates
 
-Every template under `config/nuclei/` sends one GET request to `{{BaseURL}}`,
+The header templates under `config/nuclei/` send one GET request to `{{BaseURL}}`,
 does not follow redirects, and does not carry a payload that modifies state.
 
 | Template ID | Signal |
@@ -47,3 +47,10 @@ Scanner rules, commands and the three built-in benchmarks are unchanged. The
 release refines Russian presentation, bounded Planner/brief output and read-only
 Chat analysis, not detection coverage. Chat never selects new scanner flags or
 runs source code. See [BENCHMARKS.md](BENCHMARKS.md) for a reviewed extension example.
+
+## DAN extension
+
+The `dan-lab-jailbreak` template sends two bounded GET requests to `/dan/chat`
+and compares benign/probe responses on the explicit simulated fixture.
+The `python-untrusted-system-prompt` rule detects HTTP input flowing into a
+privileged message. See [DAN.md](DAN.md) for coverage, controls and limitations.
