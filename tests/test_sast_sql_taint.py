@@ -5,7 +5,6 @@ from pathlib import Path
 
 import yaml
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 RULE_IDS = {
@@ -31,9 +30,7 @@ def test_new_sqli_taint_rules() -> None:
         assert rule["pattern-sources"]
         assert rule["pattern-sinks"]
 
-        assert rule["pattern-sinks"][0]["patterns"][1] == {
-            "focus-metavariable": "$SQL"
-        }
+        assert rule["pattern-sinks"][0]["patterns"][1] == {"focus-metavariable": "$SQL"}
 
 
 def test_sqli_taint_fixtures() -> None:
@@ -49,10 +46,7 @@ def test_sqli_taint_fixtures() -> None:
     for extension in ("js", "py", "php"):
         for prefix in ("vulnerable", "benign"):
             fixture = (
-                ROOT
-                / "targets"
-                / "sast-contours"
-                / f"{prefix}-sqli-taint.{extension}"
+                ROOT / "targets" / "sast-contours" / f"{prefix}-sqli-taint.{extension}"
             )
 
             assert fixture.is_file()
