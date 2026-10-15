@@ -70,5 +70,14 @@ jobs:
           PY
           docker compose --profile ui up -d --wait --wait-timeout 180 ui
           curl --fail http://127.0.0.1:8080/healthz
+      - name: SQLi hardening regression
+        timeout-minutes: 5
+        run: |
+          mkdir -p logs
+          docker compose --profile agent run --rm --no-deps --entrypoint semgrep agent scan \
+            --config /agent/config/semgrep.yaml \
+            --metrics=off --disable-version-check --strict --json \
+            /targets/sast-sqli-hardening > logs/sqli-hardening.json
+          python -m benchmark.verify_sqli_hardening logs/sqli-hardening.json
       - if: always()
         run: docker compose --profile ui --profile agent down
