@@ -60,13 +60,13 @@ jobs:
           summary = json.loads(summary_path.read_text(encoding="utf-8"))
           evaluation = summary["benchmark_evaluation"]
 
-          assert evaluation["expected_count"] == 3, evaluation
-          assert evaluation["detected_expected_count"] == 3, evaluation
+          assert evaluation["expected_count"] == 6, evaluation
+          assert evaluation["detected_expected_count"] == 6, evaluation
           assert evaluation["missed_findings"] == [], evaluation
           assert evaluation["unexpected_findings"] == [], evaluation
           assert evaluation["precision"] == 1.0, evaluation
           assert evaluation["recall"] == 1.0, evaluation
-          print("sast-contours benchmark passed: 3/3 expected, 0 unexpected")
+          print("sast-contours benchmark passed: 6/6 expected, 0 unexpected")
           PY
           docker compose --profile ui up -d --wait --wait-timeout 180 ui
           curl --fail http://127.0.0.1:8080/healthz

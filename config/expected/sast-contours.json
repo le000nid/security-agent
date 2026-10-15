@@ -16,5 +16,23 @@
     "title": "php-remote-file-inclusion",
     "source": "SAST",
     "category": "remote-file-inclusion"
+  },
+  {
+    "tool": "semgrep",
+    "title": "javascript-sql-tainted-query",
+    "source": "SAST",
+    "category": "sql-injection"
+  },
+  {
+    "tool": "semgrep",
+    "title": "python-sql-tainted-execute",
+    "source": "SAST",
+    "category": "sql-injection"
+  },
+  {
+    "tool": "semgrep",
+    "title": "php-sql-tainted-query",
+    "source": "SAST",
+    "category": "sql-injection"
   }
 ]

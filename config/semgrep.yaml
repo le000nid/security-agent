@@ -151,3 +151,143 @@ rules:
       category: remote-file-inclusion
       confidence: HIGH
       recommendation: Store executable PHP code locally and select modules from a fixed allowlist.
+  - id: javascript-sql-tainted-query
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: Express request data reaches SQL query text. Prefer bound parameters.
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.query.$KEY
+          - pattern: $REQ.query[$KEY]
+          - pattern: $REQ.params.$KEY
+          - pattern: $REQ.params[$KEY]
+          - pattern: $REQ.body.$KEY
+          - pattern: $REQ.body[$KEY]
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $DB.query($SQL, ...)
+              - pattern: $DB.execute($SQL, ...)
+          - focus-metavariable: $SQL
+    metadata:
+      category: sql-injection
+      confidence: MEDIUM
+      recommendation: Pass request values using parameterized queries instead of including them in SQL text.
+
+  - id: python-sql-tainted-execute
+    languages: [python]
+    severity: WARNING
+    message: HTTP request data reaches SQL query text in execute/executemany.
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: request.args[...]
+          - pattern: request.args.get(...)
+          - pattern: request.form[...]
+          - pattern: request.form.get(...)
+          - pattern: request.GET[...]
+          - pattern: request.POST[...]
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $CURSOR.execute($SQL, ...)
+              - pattern: $CURSOR.executemany($SQL, ...)
+          - focus-metavariable: $SQL
+    metadata:
+      category: sql-injection
+      confidence: MEDIUM
+      recommendation: Use DB-API placeholders with separate parameters for untrusted values.
+
+  - id: php-sql-tainted-query
+    languages: [php]
+    severity: WARNING
+    message: PHP request data reaches raw SQL text in query/exec or mysqli_query.
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET[...]
+          - pattern: $_POST[...]
+          - pattern: $_REQUEST[...]
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $DB->query($SQL)
+              - pattern: $DB->exec($SQL)
+              - pattern: mysqli_query($CONNECTION, $SQL)
+          - focus-metavariable: $SQL
+    metadata:
+      category: sql-injection
+      confidence: MEDIUM
+      recommendation: Use PDO prepared statements or parameterized mysqli queries.
+  - id: javascript-knex-sqli-taint
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: HTTP input reaches raw Knex SQL. Use bound parameters.
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.query.$KEY
+          - pattern: $REQ.query[$KEY]
+          - pattern: $REQ.params.$KEY
+          - pattern: $REQ.params[$KEY]
+          - pattern: $REQ.body.$KEY
+          - pattern: $REQ.body[$KEY]
+        exact: true
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $KNEX.raw($SQL, ...)
+              - pattern: $QUERY.whereRaw($SQL, ...)
+              - pattern: $QUERY.orWhereRaw($SQL, ...)
+              - pattern: $QUERY.havingRaw($SQL, ...)
+          - focus-metavariable: $SQL
+    metadata:
+      category: sql-injection
+      confidence: MEDIUM
+      recommendation: Use Knex placeholders and separate bindings.
+
+  - id: python-django-raw-sqli-taint
+    languages: [python]
+    severity: WARNING
+    message: Django request input reaches raw ORM SQL.
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: request.GET[...]
+          - pattern: request.GET.get(...)
+          - pattern: request.POST[...]
+          - pattern: request.POST.get(...)
+        exact: true
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $MODEL.objects.raw($SQL, ...)
+              - pattern: $MODEL._default_manager.raw($SQL, ...)
+          - focus-metavariable: $SQL
+    metadata:
+      category: sql-injection
+      confidence: MEDIUM
+      recommendation: Use Django ORM or parameterized raw queries.
+
+  - id: php-prepare-sqli-taint
+    languages: [php]
+    severity: WARNING
+    message: User input is inserted into SQL before prepare().
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET[...]
+          - pattern: $_POST[...]
+          - pattern: $_REQUEST[...]
+        exact: true
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $DB->prepare($SQL)
+              - pattern: mysqli_prepare($CONN, $SQL)
+          - focus-metavariable: $SQL
+    metadata:
+      category: sql-injection
+      confidence: MEDIUM
+      recommendation: Prepare constant SQL with placeholders and bind values.
