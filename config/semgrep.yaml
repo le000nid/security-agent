@@ -119,11 +119,18 @@ rules:
     severity: WARNING
     message: User-controlled input reaches a PHP include or require statement.
     mode: taint
+    options:
+      taint_assume_safe_indexes: true
     pattern-sources:
       - pattern-either:
           - pattern: $_GET[...]
           - pattern: $_POST[...]
           - pattern: $_REQUEST[...]
+          - pattern: $_COOKIE[...]
+          - pattern: filter_input(INPUT_GET, ...)
+          - pattern: filter_input(INPUT_POST, ...)
+          - pattern: filter_input(INPUT_COOKIE, ...)
+        exact: true
     pattern-sinks:
       - pattern-either:
           - pattern: include($PATH);
@@ -137,16 +144,34 @@ rules:
   - id: php-remote-file-inclusion
     languages: [php]
     severity: WARNING
-    message: PHP includes a remote HTTP(S) file. Review remote code trust and allow_url_include settings.
-    patterns:
+    message: An HTTP(S) address reaches a PHP include or require expression. Review remote code trust and allow_url_include settings.
+    mode: taint
+    options:
+      taint_assume_safe_indexes: true
+    pattern-sources:
+      - patterns:
+          - pattern: '"$URL"'
+          - metavariable-regex:
+              metavariable: $URL
+              regex: (?i)^https?://
+        exact: true
+    pattern-sinks:
       - pattern-either:
-          - pattern: include("$URL");
-          - pattern: include_once("$URL");
-          - pattern: require("$URL");
-          - pattern: require_once("$URL");
-      - metavariable-regex:
-          metavariable: $URL
-          regex: (?i)^https?://
+          - pattern: include($PATH);
+          - pattern: include_once($PATH);
+          - pattern: require($PATH);
+          - pattern: require_once($PATH);
+    pattern-sanitizers:
+      - pattern: basename(...)
+        exact: true
+      - pattern: parse_url($URL, PHP_URL_PATH)
+        exact: true
+      - patterns:
+          - pattern: '"$PREFIX" . $REST'
+          - metavariable-regex:
+              metavariable: $PREFIX
+              regex: ^(?:/|\./|\.\./|[A-Za-z0-9_-]+/)
+        exact: true
     metadata:
       category: remote-file-inclusion
       confidence: HIGH
@@ -164,6 +189,8 @@ rules:
           - pattern: $REQ.params[$KEY]
           - pattern: $REQ.body.$KEY
           - pattern: $REQ.body[$KEY]
+          - pattern: $REQ.headers.$KEY
+          - pattern: $REQ.headers[$KEY]
     pattern-sinks:
       - patterns:
           - pattern-either:
@@ -182,12 +209,14 @@ rules:
     mode: taint
     pattern-sources:
       - pattern-either:
-          - pattern: request.args[...]
-          - pattern: request.args.get(...)
-          - pattern: request.form[...]
-          - pattern: request.form.get(...)
-          - pattern: request.GET[...]
-          - pattern: request.POST[...]
+          - pattern: $REQ.args[...]
+          - pattern: $REQ.args.get(...)
+          - pattern: $REQ.form[...]
+          - pattern: $REQ.form.get(...)
+          - pattern: $REQ.GET[...]
+          - pattern: $REQ.GET.get(...)
+          - pattern: $REQ.POST[...]
+          - pattern: $REQ.POST.get(...)
     pattern-sinks:
       - patterns:
           - pattern-either:
@@ -209,12 +238,17 @@ rules:
           - pattern: $_GET[...]
           - pattern: $_POST[...]
           - pattern: $_REQUEST[...]
+          - pattern: $_COOKIE[...]
     pattern-sinks:
       - patterns:
           - pattern-either:
-              - pattern: $DB->query($SQL)
+              - pattern: $DB->query($SQL, ...)
               - pattern: $DB->exec($SQL)
-              - pattern: mysqli_query($CONNECTION, $SQL)
+              - pattern: mysqli_query($CONNECTION, $SQL, ...)
+              - pattern: mysqli_real_query($CONNECTION, $SQL)
+              - pattern: $DB->real_query($SQL)
+              - pattern: mysqli_execute_query($CONNECTION, $SQL, ...)
+              - pattern: $DB->execute_query($SQL, ...)
           - focus-metavariable: $SQL
     metadata:
       category: sql-injection
@@ -233,6 +267,8 @@ rules:
           - pattern: $REQ.params[$KEY]
           - pattern: $REQ.body.$KEY
           - pattern: $REQ.body[$KEY]
+          - pattern: $REQ.headers.$KEY
+          - pattern: $REQ.headers[$KEY]
         exact: true
     pattern-sinks:
       - patterns:
@@ -254,10 +290,10 @@ rules:
     mode: taint
     pattern-sources:
       - pattern-either:
-          - pattern: request.GET[...]
-          - pattern: request.GET.get(...)
-          - pattern: request.POST[...]
-          - pattern: request.POST.get(...)
+          - pattern: $REQ.GET[...]
+          - pattern: $REQ.GET.get(...)
+          - pattern: $REQ.POST[...]
+          - pattern: $REQ.POST.get(...)
         exact: true
     pattern-sinks:
       - patterns:
@@ -280,11 +316,12 @@ rules:
           - pattern: $_GET[...]
           - pattern: $_POST[...]
           - pattern: $_REQUEST[...]
+          - pattern: $_COOKIE[...]
         exact: true
     pattern-sinks:
       - patterns:
           - pattern-either:
-              - pattern: $DB->prepare($SQL)
+              - pattern: $DB->prepare($SQL, ...)
               - pattern: mysqli_prepare($CONN, $SQL)
           - focus-metavariable: $SQL
     metadata:

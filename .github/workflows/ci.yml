@@ -79,5 +79,35 @@ jobs:
             --metrics=off --disable-version-check --strict --json \
             /targets/sast-sqli-hardening > logs/sqli-hardening.json
           python -m benchmark.verify_sqli_hardening logs/sqli-hardening.json
+      - name: SQLi variation regression
+        timeout-minutes: 5
+        run: |
+          mkdir -p logs
+          docker compose --profile agent run --rm --no-deps --entrypoint semgrep agent scan \
+            --config /agent/config/semgrep.yaml \
+            --metrics=off --disable-version-check --strict --json \
+            /targets/sast-sqli-variants > logs/sqli-variants.json
+          python -m benchmark.verify_sqli_variants logs/sqli-variants.json
+      - name: LFI variation regression
+        timeout-minutes: 5
+        run: |
+          mkdir -p logs
+          docker compose --profile agent run --rm --no-deps --entrypoint semgrep agent scan \
+            --config /agent/config/semgrep.yaml \
+            --metrics=off --disable-version-check --strict --json \
+            /targets/sast-lfi-variants > logs/lfi-variants.json
+          python -m benchmark.verify_lfi_variants logs/lfi-variants.json
+      - name: RFI variation regression
+        timeout-minutes: 5
+        run: |
+          mkdir -p logs
+          docker compose --profile agent run --rm --no-deps --entrypoint semgrep agent scan \
+            --config /agent/config/semgrep.yaml \
+            --metrics=off --disable-version-check --strict --json \
+            /targets/sast-rfi-variants > logs/rfi-variants.json
+          python -m benchmark.verify_rfi_variants logs/rfi-variants.json
+      - name: SAST scanner output contract
+        timeout-minutes: 5
+        run: docker compose --profile agent run --rm --no-deps --entrypoint python agent -m benchmark.verify_sast_contract
       - if: always()
         run: docker compose --profile ui --profile agent down

@@ -44,7 +44,16 @@ def test_expected_semgrep_results_normalize_for_sample_target(tmp_path: Path) ->
             }
         )
     raw = tmp_path / "raw_semgrep.json"
-    raw.write_text(json.dumps({"results": results, "errors": []}), encoding="utf-8")
+    raw.write_text(
+        json.dumps(
+            {
+                "results": results,
+                "errors": [],
+                "paths": {"scanned": sorted({record["path"] for record in results})},
+            }
+        ),
+        encoding="utf-8",
+    )
     findings = parse_semgrep_json(raw)
     assert {finding.title for finding in findings} == {
         item["title"] for item in expected

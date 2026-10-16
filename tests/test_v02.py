@@ -42,7 +42,15 @@ def semgrep_record():
 def test_semgrep_parser(tmp_path, semgrep_record):
     semgrep_record["check_id"] = "agent.config.debug"
     path = tmp_path / "raw_semgrep.json"
-    path.write_text(json.dumps({"results": [semgrep_record], "errors": []}))
+    path.write_text(
+        json.dumps(
+            {
+                "results": [semgrep_record],
+                "errors": [],
+                "paths": {"scanned": [semgrep_record["path"]]},
+            }
+        )
+    )
     result = parse_semgrep_json(path)[0]
     assert (result.source, result.severity, result.confidence) == (
         "SAST",
@@ -71,7 +79,14 @@ def test_semgrep_evidence_never_uses_requires_login(tmp_path, semgrep_record, ru
     semgrep_record["extra"]["message"] = f"Scanner message for {rule_id}"
     path = tmp_path / f"{rule_id}.json"
     path.write_text(
-        json.dumps({"results": [semgrep_record], "errors": []}), encoding="utf-8"
+        json.dumps(
+            {
+                "results": [semgrep_record],
+                "errors": [],
+                "paths": {"scanned": [semgrep_record["path"]]},
+            }
+        ),
+        encoding="utf-8",
     )
     finding = parse_semgrep_json(path)[0]
     assert finding.evidence == f"Scanner message for {rule_id}"
@@ -359,7 +374,15 @@ def test_full_orchestration(monkeypatch, tmp_path, semgrep_record):
     def sast(source, output):
         events.append("sast")
         output.parent.mkdir(exist_ok=True)
-        output.write_text(json.dumps({"results": [semgrep_record]}))
+        output.write_text(
+            json.dumps(
+                {
+                    "results": [semgrep_record],
+                    "errors": [],
+                    "paths": {"scanned": [semgrep_record["path"]]},
+                }
+            )
+        )
 
     def dast(target, output):
         events.append("dast")
