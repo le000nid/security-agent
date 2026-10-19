@@ -82,7 +82,7 @@ def test_database_is_not_published_and_api_is_local_only():
     import yaml
 
     root = Path(__file__).resolve().parents[2]
-    config = yaml.safe_load((root / "docker-compose.nosqli.yml").read_text())
+    config = yaml.safe_load((root / "docker-compose.yml").read_text())
     mongo = config["services"]["nosqli-mongo"]
     api = config["services"]["nosqli-mongo-api"]
     assert "ports" not in mongo

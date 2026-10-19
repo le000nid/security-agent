@@ -22,4 +22,4 @@ for benchmark in nosqli-profile-catalog nosqli-profile-catalog-safe \
     -m benchmark.verify_nosqli_portable --benchmark "$benchmark"
 done
 
-printf '\nPortable NoSQLi acceptance passed. Second API: http://localhost:3006\n'
+printf '\nPortable NoSQLi acceptance passed. Second API: http://localhost:3008\n'

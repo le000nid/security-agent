@@ -26,6 +26,25 @@ ensure_image() {
 agent_image() {
   docker compose --profile agent config --images agent
 }
-start_lab() {
-  docker compose up -d --wait --wait-timeout 180 juice-shop demo-full || fail 'Benchmark unhealthy. Check ports 3000/3001 and docker compose logs juice-shop demo-full.'
+start_benchmark_lab() {
+  local benchmark="$1" service="" profile=()
+  case "$benchmark" in
+    juice-shop) service=juice-shop ;;
+    demo-full) service=demo-full ;;
+    dan-lab) service=dan-lab ;;
+    nosqli-dast) service=nosqli-lab ;;
+    nosqli-mongo-full|nosqli-profile-catalog|nosqli-profile-catalog-safe)
+      service=nosqli-mongo-api; profile=(--profile nosqli-mongo) ;;
+    nosqli-profile-inventory|nosqli-profile-inventory-safe)
+      service=nosqli-portable-api; profile=(--profile nosqli-mongo --profile nosqli-portable) ;;
+    ssrf-lab) service=ssrf-lab ;;
+    security-key-lab) service=security-key-lab ;;
+    *) return 0 ;;
+  esac
+  docker compose "${profile[@]}" up -d --build --wait --wait-timeout 180 "$service" || fail "Benchmark $benchmark is unhealthy."
+}
+start_all_benchmark_labs() {
+  docker compose --profile nosqli-mongo --profile nosqli-portable up -d --build --wait --wait-timeout 180 \
+    juice-shop demo-full dan-lab nosqli-lab nosqli-mongo-api nosqli-portable-api ssrf-lab security-key-lab \
+    || fail 'One or more registered HTTP benchmarks are unhealthy.'
 }

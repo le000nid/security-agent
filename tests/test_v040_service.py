@@ -63,6 +63,11 @@ def test_builtin_registry():
         "nosqli-profile-inventory",
         "nosqli-profile-inventory-safe",
         "nosqli-sast-matrix",
+        "sast-contours",
+        "dan-lab",
+        "ssrf-lab",
+        "spoofing-sast",
+        "security-key-lab",
     }
     assert registry.trusted_hosts() == {
         "juice-shop",
@@ -70,6 +75,9 @@ def test_builtin_registry():
         "nosqli-lab",
         "nosqli-mongo-api",
         "nosqli-portable-api",
+        "dan-lab",
+        "ssrf-lab",
+        "security-key-lab",
     }
     assert validate_target_url("http://demo-full:3000") == "http://demo-full:3000"
     assert Path(registry.get("demo-full").local_source()).is_dir()

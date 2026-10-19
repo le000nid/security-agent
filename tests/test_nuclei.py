@@ -48,7 +48,7 @@ def test_curated_templates_use_reviewed_http_requests() -> None:
         "nosqli-mongo-scope-overwrite": "scope",
     }
     templates = sorted(TEMPLATE_DIRECTORY.glob("*.yaml"))
-    assert len(templates) >= 5
+    assert len(templates) >= 10
     ids = []
     for template in templates:
         text = template.read_text(encoding="utf-8")

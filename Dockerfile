@@ -26,8 +26,8 @@ COPY pyproject.toml ./
 RUN pip install --no-cache-dir --no-deps --no-build-isolation . && \
     useradd --uid 1000 --create-home agent && \
     mkdir -p logs reports runs /tmp/agent-home && \
-    chown -R agent:agent logs reports runs /tmp/agent-home && \
-    semgrep --version && nuclei -version
+    semgrep --version && nuclei -version && \
+    chown -R agent:agent logs reports runs /tmp/agent-home
 USER 1000:1000
 ENTRYPOINT ["security-agent"]
 CMD ["--help"]

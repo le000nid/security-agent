@@ -1,4 +1,6 @@
 import copy
+import json
+from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
@@ -50,6 +52,15 @@ def test_acceptance_counts_instances_not_only_unique_rule_types():
     repository.findings.return_value = findings[:1] + findings[2:]
     with pytest.raises(ValueError, match="six scenario findings"):
         verify(repository)
+
+
+def test_expected_sast_categories_match_semgrep_metadata():
+    root = Path(__file__).resolve().parents[2]
+    baseline = json.loads(
+        (root / "config/expected/nosqli-mongo-full.json").read_text(encoding="utf-8")
+    )
+    categories = {item["category"] for item in baseline if item["tool"] == "semgrep"}
+    assert categories == {"nosql-injection"}
 
 
 @pytest.mark.parametrize("failure", ["failed", "missing-type", "llm", "evidence"])

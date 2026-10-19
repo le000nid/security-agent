@@ -129,7 +129,7 @@ docker compose -f docker-compose.yml -f docker-compose.nosqli.yml \
 
 Интерфейс: `http://localhost:8080`. Выбери набор с `NoSQLi profiles`.
 Сервисы API уже запускает проверочный скрипт выше.
-Второй API доступен отдельно на `http://localhost:3006/healthz`.
+Второй API доступен отдельно на `http://localhost:3008/healthz`.
 
 ## Ограничения
 

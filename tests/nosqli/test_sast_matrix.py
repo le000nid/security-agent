@@ -44,7 +44,7 @@ def synthetic_payload(source: Path) -> dict:
                             "severity": "WARNING",
                             "message": "Review untrusted NoSQL query data.",
                             "metadata": {
-                                "category": "injection",
+                                "category": "nosql-injection",
                                 "confidence": "MEDIUM",
                             },
                         },
@@ -239,7 +239,7 @@ def test_normalization_keeps_rule_metadata_and_locations(tmp_path):
     assert all(
         f.source == "SAST"
         and f.tool == "semgrep"
-        and f.category == "injection"
+        and f.category == "nosql-injection"
         and f.confidence == "medium"
         for f in findings
     )

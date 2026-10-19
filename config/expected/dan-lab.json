@@ -1,0 +1,4 @@
+[
+  {"tool": "semgrep", "title": "python-untrusted-system-prompt", "source": "SAST", "category": "prompt-injection"},
+  {"tool": "nuclei", "title": "DAN lab synthetic marker disclosure", "source": "DAST", "category": "prompt-injection"}
+]
