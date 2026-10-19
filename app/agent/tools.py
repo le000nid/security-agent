@@ -15,6 +15,7 @@ from app.enrichment import enrich_independently
 from app.events import Observer
 from app.llm import OpenAICompatibleClient
 from app.llm_output import LLMError
+from app.nosqli.scanner import scan_profiles
 from app.nuclei import run_nuclei
 from app.parser import parse_nuclei_jsonl
 from app.runs import RunPaths
@@ -56,7 +57,7 @@ class ToolRegistry:
                 ),
                 Action.RUN_DAST: AgentTool(
                     Action.RUN_DAST,
-                    "Local low-impact HTTP Nuclei templates",
+                    "Local HTTP templates or configured NoSQL JSON comparisons",
                     self._dast,
                 ),
                 Action.ENRICH_FINDINGS: AgentTool(
@@ -114,6 +115,20 @@ class ToolRegistry:
         )
 
     def _dast(self, state: AgentState) -> ToolResult:
+        if state.nosqli_profiles:
+            raw = self.paths.logs / "raw_nosqli.json"
+            result = scan_profiles(state.target_url, state.nosqli_profiles, raw)
+            return ToolResult(
+                tool=Action.RUN_DAST,
+                success=True,
+                status=Status.COMPLETED_WITH_FAILURES
+                if result.warnings
+                else Status.COMPLETED,
+                findings=result.findings,
+                findings_added=len(result.findings),
+                warnings=result.warnings,
+                raw_output_ref=raw.as_posix(),
+            )
         raw = self.paths.logs / "raw_nuclei.jsonl"
         run_nuclei(state.target_url, raw)
         findings = parse_nuclei_jsonl(raw)
@@ -175,6 +190,7 @@ class ToolRegistry:
 
 def apply_result(state: AgentState, result: ToolResult) -> None:
     setattr(state, STAGES[result.tool], result.status)
+    state.warnings.extend(result.warnings)
     state.executed_actions.append(result.tool)
     if result.enrichment is not None:
         state.enrichment = result.enrichment

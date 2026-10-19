@@ -46,7 +46,9 @@ class ActionValidator:
                 raise ValueError(
                     "Complete scanning before enrichment; findings required"
                 )
-            if Status.COMPLETED not in (state.sast_status, state.dast_status):
+            if not {Status.COMPLETED, Status.COMPLETED_WITH_FAILURES}.intersection(
+                (state.sast_status, state.dast_status)
+            ):
                 raise ValueError("A successful scanner is required")
         elif action in (Action.GENERATE_AI_BRIEF, Action.GENERATE_REPORT):
             if not self.scanning_terminal(state):

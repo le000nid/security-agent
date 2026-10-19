@@ -10,7 +10,11 @@ on:
       - 'app/nuclei.py'
       - 'app/semgrep.py'
       - 'benchmark/verify_nosqli*.py'
-      - 'scripts/check-nosqli.sh'
+      - 'scripts/check-nosqli*.sh'
+      - 'app/nosqli/**'
+      - 'app/agent/**'
+      - 'app/benchmarks.py'
+      - 'app/service.py'
       - 'docker-compose*.yml'
       - 'Dockerfile'
       - 'pyproject.toml'
@@ -21,7 +25,11 @@ on:
       - 'targets/nosqli-lab/**'
       - 'config/**'
       - 'benchmark/verify_nosqli*.py'
-      - 'scripts/check-nosqli.sh'
+      - 'scripts/check-nosqli*.sh'
+      - 'app/nosqli/**'
+      - 'app/agent/**'
+      - 'app/benchmarks.py'
+      - 'app/service.py'
       - 'docker-compose*.yml'
       - '.github/workflows/nosqli.yml'
 
@@ -37,6 +45,8 @@ jobs:
       - uses: docker/setup-buildx-action@v3
       - name: Real MongoDB, scanners and FULL report
         run: bash scripts/check-nosqli.sh
+      - name: Portable profiles against two API contracts
+        run: bash scripts/check-nosqli-portable.sh
       - name: Save scanner reports and diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -48,4 +58,4 @@ jobs:
         if: always()
         run: >-
           docker compose -f docker-compose.yml -f docker-compose.nosqli.yml
-          --profile agent --profile nosqli-mongo --profile nosqli-tests down
+          --profile agent --profile nosqli-mongo --profile nosqli-tests --profile nosqli-portable down

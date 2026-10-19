@@ -52,3 +52,40 @@
   docker_service: nosqli-mongo-api
   expected_findings: nosqli-mongo-full.json
   tags: [educational, same-application, nosqli, mongodb]
+
+- id: nosqli-profile-catalog
+  name: NoSQLi profiles - catalog
+  description: Configurable scalar operator probe against the original MongoDB API.
+  description_ru: Переносимая проверка оператора на первом API. Ожидается одна находка.
+  capabilities: [dast]
+  target_url: http://nosqli-mongo-api:3000
+  docker_service: nosqli-mongo-api
+  nosqli_profiles: [catalog-operator]
+  tags: [educational, nosqli, profiles]
+- id: nosqli-profile-catalog-safe
+  name: NoSQLi profiles - catalog control
+  description: The same contract against the validated scalar endpoint; no finding expected.
+  description_ru: Безопасная пара первого API. Оператор должен быть отклонён.
+  capabilities: [dast]
+  target_url: http://nosqli-mongo-api:3000
+  docker_service: nosqli-mongo-api
+  nosqli_profiles: [catalog-operator-safe]
+  tags: [educational, nosqli, profiles, control]
+- id: nosqli-profile-inventory
+  name: NoSQLi profiles - inventory
+  description: POST and GET probes against a second MongoDB API with nested input and response fields.
+  description_ru: Второй API с другими полями и ответом. Проверки POST и GET; ожидаются две находки.
+  capabilities: [dast]
+  target_url: http://nosqli-portable-api:3000
+  docker_service: nosqli-portable-api
+  nosqli_profiles: [inventory-post, inventory-get]
+  tags: [educational, nosqli, profiles, mongodb]
+- id: nosqli-profile-inventory-safe
+  name: NoSQLi profiles - inventory controls
+  description: POST and GET against scalar-validated inventory routes; no finding expected.
+  description_ru: Безопасные пары второго API для POST и GET. Находок не ожидается.
+  capabilities: [dast]
+  target_url: http://nosqli-portable-api:3000
+  docker_service: nosqli-portable-api
+  nosqli_profiles: [inventory-post-safe, inventory-get-safe]
+  tags: [educational, nosqli, profiles, control]

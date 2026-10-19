@@ -58,12 +58,17 @@ def test_builtin_registry():
         "nosqli-sast",
         "nosqli-dast",
         "nosqli-mongo-full",
+        "nosqli-profile-catalog",
+        "nosqli-profile-catalog-safe",
+        "nosqli-profile-inventory",
+        "nosqli-profile-inventory-safe",
     }
     assert registry.trusted_hosts() == {
         "juice-shop",
         "demo-full",
         "nosqli-lab",
         "nosqli-mongo-api",
+        "nosqli-portable-api",
     }
     assert validate_target_url("http://demo-full:3000") == "http://demo-full:3000"
     assert Path(registry.get("demo-full").local_source()).is_dir()

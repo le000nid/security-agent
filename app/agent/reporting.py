@@ -75,6 +75,7 @@ def write_reports(
         "run_id": state.run_id,
         "benchmark_id": state.benchmark_id,
         "benchmark_name": state.benchmark_name,
+        "nosqli_profiles": state.nosqli_profiles,
         "mode": state.mode,
         "same_application": state.same_application,
         "orchestration": state.orchestration,

@@ -101,6 +101,7 @@ class RunService:
             mode=mode,
             benchmark_id=benchmark.id if benchmark else None,
             benchmark_name=benchmark.name if benchmark else None,
+            nosqli_profiles=benchmark.nosqli_profiles if benchmark else [],
             same_application=bool(benchmark and mode == "full"),
             llm_enabled=request.llm_enabled,
             benchmark_expected=benchmark.expected_findings if benchmark else None,

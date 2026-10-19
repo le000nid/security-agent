@@ -34,3 +34,20 @@
 
 Предыдущие файлы `targets/nosqli/` и `juice-shop-nosqli-reviews.yaml`
 относятся к первому сценарию `$where` и сохраняют прежние команды запуска.
+
+## Переносимая проверка
+
+| Файл | Назначение |
+|---|---|
+| `app/nosqli/profiles.py` | Проверяет формат профилей и выбирает нужные |
+| `app/nosqli/scanner.py` | Отправляет запросы, сравнивает записи и создаёт общие находки |
+| `config/nosqli-profiles.yaml` | Маршруты, поля, исходные значения и формат ответов двух API |
+| `app/benchmarks.py`, `app/service.py` | Передают выбранные профили из реестра в запуск |
+| `app/agent/models.py`, `tools.py`, `reporting.py` | Подключают сканер, находки, предупреждения и информацию о профилях к отчётам |
+| `app/agent/validator.py` | Разрешает необязательное обогащение подтверждённых находок при частичном успехе сканера |
+| `targets/nosqli-lab/portable-src/` | Второй API с другим контрактом и коллекцией MongoDB |
+| `targets/nosqli-lab/test/portable.test.js` | Валидация, ошибки и безопасные/опасные пары второго API |
+| `tests/nosqli/test_portable.py` | Сравнение ответов, отрицательные случаи, отчёт и веб-API |
+| `benchmark/verify_nosqli_portable.py` | Сверяет результат каждого проверочного запуска |
+| `scripts/check-nosqli-portable.sh` | Полная проверка второго этапа в Docker |
+| `docs/nosqli/PORTABLE.md` | Как запустить, настроить и объяснить эту часть |
