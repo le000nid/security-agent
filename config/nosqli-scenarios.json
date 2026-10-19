@@ -1,0 +1,38 @@
+[
+  {
+    "id": "scalar-operator",
+    "route": "operator",
+    "mechanism": "operator-injection",
+    "sast_rule": "javascript-nosqli-scalar-operator",
+    "nuclei_id": "nosqli-mongo-scalar-operator",
+    "baseline": {"sku": "APPLE"},
+    "probe": {"sku": {"$ne": "MISSING"}},
+    "control": {"sku": "MISSING"},
+    "baseline_ids": ["catalog-apple"],
+    "probe_ids": ["catalog-apple", "catalog-banana", "catalog-cherry"]
+  },
+  {
+    "id": "whole-filter",
+    "route": "filter",
+    "mechanism": "untrusted-filter",
+    "sast_rule": "javascript-nosqli-untrusted-filter",
+    "nuclei_id": "nosqli-mongo-whole-filter",
+    "baseline": {"filter": {"sku": "APPLE"}},
+    "probe": {"filter": {"$or": [{"sku": "APPLE"}, {"sku": "BANANA"}]}},
+    "control": {"filter": {"sku": "MISSING"}},
+    "baseline_ids": ["catalog-apple"],
+    "probe_ids": ["catalog-apple", "catalog-banana"]
+  },
+  {
+    "id": "scope-overwrite",
+    "route": "scope",
+    "mechanism": "untrusted-filter",
+    "sast_rule": "javascript-nosqli-untrusted-filter",
+    "nuclei_id": "nosqli-mongo-scope-overwrite",
+    "baseline": {"filter": {}},
+    "probe": {"filter": {"owner": "bob"}},
+    "control": {"filter": {"sku": "MISSING"}},
+    "baseline_ids": ["alice-order"],
+    "probe_ids": ["bob-order"]
+  }
+]

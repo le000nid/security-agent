@@ -41,12 +41,12 @@ def test_run_nuclei_fails_when_binary_is_missing(
 
 def test_all_curated_templates_are_local_http_gets() -> None:
     templates = sorted(TEMPLATE_DIRECTORY.glob("*.yaml"))
-    assert 5 <= len(templates) <= 10
+    assert 10 <= len(templates) <= 30
     for template in templates:
         text = template.read_text(encoding="utf-8")
         assert "http:" in text
-        assert "method: GET" in text
-        assert "{{BaseURL}}" in text
+        assert "method: GET" in text or "method: POST" in text or "- raw:" in text
+        assert "{{BaseURL}}" in text or "{{Hostname}}" in text
         assert "redirects: false" in text
         assert not any(
             forbidden in text

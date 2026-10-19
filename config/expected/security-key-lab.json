@@ -1,0 +1,4 @@
+[
+  {"tool":"semgrep","title":"python-obvious-hardcoded-secret","source":"SAST","category":"secrets"},
+  {"tool":"nuclei","title":"Synthetic training key disclosure","source":"DAST","category":"secrets, simulation"}
+]

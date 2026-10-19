@@ -1,0 +1,13 @@
+{
+  "name": "security-agent-nosqli-lab",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Read-only MongoDB injection scenarios for the security-agent benchmark",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": { "mongodb": "6.20.0" }
+}

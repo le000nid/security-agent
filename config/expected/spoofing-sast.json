@@ -1,0 +1,4 @@
+[
+  {"tool":"semgrep","title":"python-arp-spoofing-pattern","source":"SAST","category":"spoofing"},
+  {"tool":"semgrep","title":"python-dns-spoofing-pattern","source":"SAST","category":"spoofing"}
+]

@@ -25,7 +25,7 @@ security-agent = "app.main:main"
 include = ["app*", "benchmark*"]
 
 [tool.setuptools.data-files]
-"share/ai-security-agent/config" = ["config/semgrep.yaml", "config/benchmarks.yaml"]
+"share/ai-security-agent/config" = ["config/semgrep.yaml", "config/benchmarks.yaml", "config/nosqli-scenarios.json"]
 "share/ai-security-agent/config/expected" = ["config/expected/*.json"]
 "share/ai-security-agent/config/nuclei" = ["config/nuclei/*.yaml"]
 

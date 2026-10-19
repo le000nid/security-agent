@@ -67,6 +67,17 @@ function node(tag, text, cls) {
 function status(value) { return statuses[value] || "нет данных"; }
 function errorText(code) { return (errors[code] || "Не удалось выполнить операцию.") + (code ? " (" + code + ")" : ""); }
 function counts(data) { return Object.entries(data || {}).map(([key, value]) => key.toUpperCase() + ": " + value).join(" · ") || "нет"; }
+const categoryNames = {
+  security_headers:"Заголовки безопасности", cors:"CORS", secrets:"Секреты и ключи",
+  code_execution:"Выполнение кода", unsafe_deserialization:"Небезопасная десериализация",
+  tls_configuration:"Настройки TLS", debug_configuration:"Режим отладки",
+  injection:"Инъекция", authentication:"Аутентификация", authorization:"Авторизация",
+  information_exposure:"Раскрытие информации", other:"Другая категория",
+  "sql-injection":"SQL Injection", "local-file-inclusion":"LFI",
+  "remote-file-inclusion":"RFI", "prompt-injection":"Prompt Injection",
+  "nosql-injection":"NoSQL Injection", ssrf:"SSRF", spoofing:"Подмена ARP/DNS"
+};
+function categoryName(value) { return categoryNames[value] || value || "Без категории"; }
 function orchestration(value) { return value === "agent" ? "ИИ-агент" : "Обычное сканирование"; }
 function notify(message) { $("notice").textContent = message; }
 function fail(error) { notify(error.message || "Не удалось выполнить операцию."); }
@@ -236,7 +247,7 @@ async function openRun(id) {
   $("severity").value = ""; $("source").value = "";
   const all = node("option", "Все категории"); all.value = ""; $("category").replaceChildren(all);
   for (const category of [...new Set(findings.map(f => f.normalized_category || f.category))].sort()) {
-    const option = node("option", category); option.value = category; $("category").append(option);
+    const option = node("option", categoryName(category)); option.value = category; $("category").append(option);
   }
   $("finding-detail").hidden = true; renderFindings(); show("detail");
 }
@@ -249,7 +260,7 @@ function renderFindings() {
   for (const f of findings) {
     const tr = node("tr"); tr.append(node("td", f.severity.toUpperCase(), "severity " + f.severity));
     const title = node("td"), button = node("button", f.title); button.onclick = () => findingDetail(f); title.append(button);
-    tr.append(title, node("td", f.source + " / " + f.tool), node("td", f.normalized_category || f.category), node("td", f.location));
+    tr.append(title, node("td", f.source + " / " + f.tool), node("td", categoryName(f.normalized_category || f.category)), node("td", f.location));
     $("findings").append(tr);
   }
   $("finding-count").textContent = "Показано находок: " + findings.length + " из " + allFindings.length;

@@ -30,6 +30,94 @@ services:
       interval: 5s
       timeout: 3s
       retries: 15
+  dan-lab:
+    build: ./targets/dan-lab
+    image: ai-security-dan-lab:0.4.1
+    user: "1000:1000"
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    ports: ["127.0.0.1:3002:3000"]
+    volumes: ["./targets/dan-lab:/lab:ro"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+  nosqli-lab:
+    image: bkimminich/juice-shop:v20.2.0
+    environment:
+      NODE_CONFIG: '{"challenges":{"safetyMode":"disabled"}}'
+    ports: ["127.0.0.1:3004:3000"]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    healthcheck:
+      test: ["CMD", "/nodejs/bin/node", "-e", "require('http').get('http://127.0.0.1:3000',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+  nosqli-mongo:
+    image: mongo:8.0.17
+    profiles: ["nosqli-mongo"]
+    user: "999:999"
+    command: ["mongod", "--bind_ip_all", "--quiet"]
+    networks: ["nosqli-db"]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "quit(db.adminCommand({ping:1}).ok ? 0 : 1)"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+  nosqli-mongo-api:
+    profiles: ["nosqli-mongo"]
+    build: ./targets/nosqli-lab
+    image: ai-security-nosqli-lab:0.4.1
+    user: "1000:1000"
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    environment:
+      MONGODB_URI: mongodb://nosqli-mongo:27017
+    networks: ["default", "nosqli-db"]
+    ports: ["127.0.0.1:3005:3000"]
+    depends_on:
+      nosqli-mongo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+  ssrf-lab:
+    build: ./targets/ssrf-lab
+    image: ai-security-ssrf-lab:0.4.1
+    user: "1000:1000"
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    ports: ["127.0.0.1:3006:3000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+  security-key-lab:
+    build: ./targets/security-key-lab
+    image: ai-security-key-lab:0.4.1
+    user: "1000:1000"
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    ports: ["127.0.0.1:3007:3000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
   agent: &agent
     profiles: ["agent"]
     build: .
@@ -73,3 +161,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+networks:
+  nosqli-db:
+    internal: true
