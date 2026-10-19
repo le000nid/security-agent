@@ -1,0 +1,29 @@
+# Compatibility overlay: runtime services live in docker-compose.yml.
+services:
+  nosqli-mongo-tests:
+    profiles:
+    - nosqli-tests
+    image: ai-security-nosqli-lab:0.4.1
+    user: 1000:1000
+    read_only: true
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    environment:
+      MONGO_TEST_URI: mongodb://nosqli-mongo:27017
+      NOSQLI_SCENARIOS: /lab/scenarios.json
+    volumes:
+    - ./targets/nosqli-lab/test:/lab/test:ro
+    - ./config/nosqli-scenarios.json:/lab/scenarios.json:ro
+    networks:
+    - nosqli-db
+    depends_on:
+      nosqli-mongo:
+        condition: service_healthy
+    command:
+    - node
+    - --test
+    - test/validation.test.js
+    - test/mongodb.test.js
+    - test/portable.test.js

@@ -1,97 +1,245 @@
 - id: sample-sast
   name: Sample SAST
-  description: Учебные исходники Python и JavaScript с девятью ожидаемыми находками Semgrep.
-  description_ru: Учебные исходники Python и JavaScript с девятью ожидаемыми находками Semgrep. Только SAST, без HTTP-сервиса.
-  capabilities: [sast]
+  description: Учебные исходники Python и JavaScript с девятью ожидаемыми находками
+    Semgrep.
+  description_ru: Учебные исходники Python и JavaScript с девятью ожидаемыми находками
+    Semgrep. Только SAST, без HTTP-сервиса.
+  capabilities:
+  - sast
   source_path: /targets/sample-app
   expected_findings: sample-sast.json
-  tags: [educational, source-only]
+  tags:
+  - educational
+  - source-only
 - id: juice-shop
   name: OWASP Juice Shop
-  description: Локальный HTTP-стенд OWASP Juice Shop без включённых исходников; только DAST.
-  description_ru: Локальный HTTP-стенд OWASP Juice Shop. Исходники этого приложения не включены; доступен только DAST.
-  capabilities: [dast]
+  description: Локальный HTTP-стенд OWASP Juice Shop без включённых исходников; только
+    DAST.
+  description_ru: Локальный HTTP-стенд OWASP Juice Shop. Исходники этого приложения
+    не включены; доступен только DAST.
+  capabilities:
+  - dast
   target_url: http://juice-shop:3000
   docker_service: juice-shop
-  tags: [educational, http]
+  tags:
+  - educational
+  - http
 - id: demo-full
   name: Demo Full
-  description: Исходники и HTTP-сервис одного учебного проекта с безопасными детерминированными индикаторами.
-  description_ru: Исходники и HTTP-сервис одного учебного проекта. FULL объединяет SAST и DAST; ожидаются четыре находки в коде и три в HTTP-конфигурации.
-  capabilities: [sast, dast]
+  description: Исходники и HTTP-сервис одного учебного проекта с безопасными детерминированными
+    индикаторами.
+  description_ru: Исходники и HTTP-сервис одного учебного проекта. FULL объединяет
+    SAST и DAST; ожидаются четыре находки в коде и три в HTTP-конфигурации.
+  capabilities:
+  - sast
+  - dast
   source_path: /targets/demo-full
   target_url: http://demo-full:3000
   docker_service: demo-full
   expected_findings: demo-full.json
-  tags: [educational, same-application, curated]
+  tags:
+  - educational
+  - same-application
+  - curated
 - id: sast-contours
   name: Контуры SAST
-  description: Учебные исходники для SQL Injection, LFI и RFI с безопасными контрольными примерами.
-  description_ru: Учебные исходники для SQL Injection, LFI и RFI с безопасными контрольными примерами.
-  capabilities: [sast]
+  description: Учебные исходники для SQL Injection, LFI и RFI с безопасными контрольными
+    примерами.
+  description_ru: Учебные исходники для SQL Injection, LFI и RFI с безопасными контрольными
+    примерами.
+  capabilities:
+  - sast
   source_path: /targets/sast-contours
   expected_findings: sast-contours.json
-  tags: [educational, source-only, sast, curated]
+  tags:
+  - educational
+  - source-only
+  - sast
+  - curated
 - id: dan-lab
   name: DAN — учебная симуляция
-  description: Детерминированная симуляция prompt injection без настоящей LLM и без доказательства jailbreak.
-  description_ru: Детерминированная симуляция prompt injection без настоящей LLM и без доказательства jailbreak.
-  capabilities: [sast, dast]
+  description: Детерминированная симуляция prompt injection без настоящей LLM и без
+    доказательства jailbreak.
+  description_ru: Детерминированная симуляция prompt injection без настоящей LLM и
+    без доказательства jailbreak.
+  capabilities:
+  - sast
+  - dast
   source_path: /targets/dan-lab
   target_url: http://dan-lab:3000
   docker_service: dan-lab
   expected_findings: dan-lab.json
-  tags: [educational, same-application, simulated-llm]
+  tags:
+  - educational
+  - same-application
+  - simulated-llm
 - id: nosqli-sast
   name: NoSQLi SAST
   description: Учебные JavaScript-примеры NoSQLi и безопасные контрольные варианты.
   description_ru: Учебные JavaScript-примеры NoSQLi и безопасные контрольные варианты.
-  capabilities: [sast]
+  capabilities:
+  - sast
   source_path: /targets/nosqli
-  tags: [educational, source-only, nosqli]
+  tags:
+  - educational
+  - source-only
+  - nosqli
 - id: nosqli-dast
   name: Juice Shop NoSQLi DAST
   description: Отдельный локальный Juice Shop для безопасной проверки NoSQLi в отзывах.
-  description_ru: Отдельный локальный Juice Shop для безопасной проверки NoSQLi в отзывах.
-  capabilities: [dast]
+  description_ru: Отдельный локальный Juice Shop для безопасной проверки NoSQLi в
+    отзывах.
+  capabilities:
+  - dast
   target_url: http://nosqli-lab:3000
   docker_service: nosqli-lab
-  tags: [educational, http, nosqli]
+  tags:
+  - educational
+  - http
+  - nosqli
 - id: nosqli-mongo-full
   name: MongoDB NoSQLi FULL
-  description: Один локальный проект с тремя NoSQLi-сценариями и безопасными парными endpoint.
-  description_ru: Один локальный проект с тремя NoSQLi-сценариями и безопасными парными endpoint.
-  capabilities: [sast, dast]
+  description: Один локальный проект с тремя NoSQLi-сценариями и безопасными парными
+    endpoint.
+  description_ru: Один локальный проект с тремя NoSQLi-сценариями и безопасными парными
+    endpoint.
+  capabilities:
+  - sast
+  - dast
   source_path: /targets/nosqli-lab/src
   target_url: http://nosqli-mongo-api:3000
   docker_service: nosqli-mongo-api
   expected_findings: nosqli-mongo-full.json
-  tags: [educational, same-application, nosqli, mongodb]
+  tags:
+  - educational
+  - same-application
+  - nosqli
+  - mongodb
 - id: ssrf-lab
   name: SSRF Lab
-  description: Локальная детерминированная SSRF-симуляция с безопасным контрольным endpoint.
-  description_ru: Локальная детерминированная SSRF-симуляция с безопасным контрольным endpoint.
-  capabilities: [sast, dast]
+  description: Локальная детерминированная SSRF-симуляция с безопасным контрольным
+    endpoint.
+  description_ru: Локальная детерминированная SSRF-симуляция с безопасным контрольным
+    endpoint.
+  capabilities:
+  - sast
+  - dast
   source_path: /targets/ssrf-lab
   target_url: http://ssrf-lab:3000
   docker_service: ssrf-lab
   expected_findings: ssrf-lab.json
-  tags: [educational, same-application, ssrf, simulation]
+  tags:
+  - educational
+  - same-application
+  - ssrf
+  - simulation
 - id: spoofing-sast
   name: Spoofing SAST
-  description: Статический поиск учебных ARP/DNS spoofing-паттернов; сетевые пакеты не отправляются.
-  description_ru: Статический поиск учебных ARP/DNS spoofing-паттернов; сетевые пакеты не отправляются.
-  capabilities: [sast]
+  description: Статический поиск учебных ARP/DNS spoofing-паттернов; сетевые пакеты
+    не отправляются.
+  description_ru: Статический поиск учебных ARP/DNS spoofing-паттернов; сетевые пакеты
+    не отправляются.
+  capabilities:
+  - sast
   source_path: /targets/spoofing-sast
   expected_findings: spoofing-sast.json
-  tags: [educational, source-only, spoofing]
+  tags:
+  - educational
+  - source-only
+  - spoofing
 - id: security-key-lab
   name: Security Key Lab
-  description: "Синтетический training key: hardcoded secret в SAST и локальная утечка в DAST."
-  description_ru: "Синтетический training key: hardcoded secret в SAST и локальная утечка в DAST."
-  capabilities: [sast, dast]
+  description: 'Синтетический training key: hardcoded secret в SAST и локальная утечка
+    в DAST.'
+  description_ru: 'Синтетический training key: hardcoded secret в SAST и локальная
+    утечка в DAST.'
+  capabilities:
+  - sast
+  - dast
   source_path: /targets/security-key-lab
   target_url: http://security-key-lab:3000
   docker_service: security-key-lab
   expected_findings: security-key-lab.json
-  tags: [educational, same-application, synthetic-secret]
+  tags:
+  - educational
+  - same-application
+  - synthetic-secret
+- id: nosqli-profile-catalog
+  name: NoSQLi profiles - catalog
+  description: Configurable scalar operator probe against the original MongoDB API.
+  description_ru: Переносимая проверка оператора на первом API. Ожидается одна находка.
+  capabilities:
+  - dast
+  target_url: http://nosqli-mongo-api:3000
+  docker_service: nosqli-mongo-api
+  nosqli_profiles:
+  - catalog-operator
+  tags:
+  - educational
+  - nosqli
+  - profiles
+- id: nosqli-profile-catalog-safe
+  name: NoSQLi profiles - catalog control
+  description: The same contract against the validated scalar endpoint; no finding
+    expected.
+  description_ru: Безопасная пара первого API. Оператор должен быть отклонён.
+  capabilities:
+  - dast
+  target_url: http://nosqli-mongo-api:3000
+  docker_service: nosqli-mongo-api
+  nosqli_profiles:
+  - catalog-operator-safe
+  tags:
+  - educational
+  - nosqli
+  - profiles
+  - control
+- id: nosqli-profile-inventory
+  name: NoSQLi profiles - inventory
+  description: POST and GET probes against a second MongoDB API with nested input
+    and response fields.
+  description_ru: Второй API с другими полями и ответом. Проверки POST и GET; ожидаются
+    две находки.
+  capabilities:
+  - dast
+  target_url: http://nosqli-portable-api:3000
+  docker_service: nosqli-portable-api
+  nosqli_profiles:
+  - inventory-post
+  - inventory-get
+  tags:
+  - educational
+  - nosqli
+  - profiles
+  - mongodb
+- id: nosqli-profile-inventory-safe
+  name: NoSQLi profiles - inventory controls
+  description: POST and GET against scalar-validated inventory routes; no finding
+    expected.
+  description_ru: Безопасные пары второго API для POST и GET. Находок не ожидается.
+  capabilities:
+  - dast
+  target_url: http://nosqli-portable-api:3000
+  docker_service: nosqli-portable-api
+  nosqli_profiles:
+  - inventory-post-safe
+  - inventory-get-safe
+  tags:
+  - educational
+  - nosqli
+  - profiles
+  - control
+- id: nosqli-sast-matrix
+  name: NoSQLi SAST coverage matrix
+  description: Reviewed JavaScript and TypeScript cases for four NoSQLi rules; exact
+    source-location acceptance.
+  description_ru: '80 SAST-примеров JavaScript и TypeScript: 40 опасных и 40 безопасных.
+    Проверяется точное место каждой находки.'
+  capabilities:
+  - sast
+  source_path: /targets/nosqli-variants
+  tags:
+  - educational
+  - source-only
+  - nosqli
+  - regression

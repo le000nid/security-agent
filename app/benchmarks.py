@@ -26,6 +26,7 @@ class Benchmark(BaseModel):
     target_url: str | None = None
     docker_service: BenchmarkId | None = None
     expected_findings: str | None = None
+    nosqli_profiles: list[BenchmarkId] = Field(default_factory=list, max_length=8)
     tags: list[str] = Field(default_factory=list)
     enabled: bool = True
 
@@ -37,6 +38,11 @@ class Benchmark(BaseModel):
             raise ValueError("benchmark_source_required")
         if ("dast" in self.capabilities) != bool(self.target_url):
             raise ValueError("benchmark_target_required")
+        if self.nosqli_profiles and (
+            "dast" not in self.capabilities
+            or len(set(self.nosqli_profiles)) != len(self.nosqli_profiles)
+        ):
+            raise ValueError("invalid_nosqli_profiles")
         if self.source_path:
             path = PurePosixPath(self.source_path)
             if (

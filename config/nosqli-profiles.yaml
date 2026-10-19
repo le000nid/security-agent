@@ -1,0 +1,51 @@
+# Each profile describes a known, read-only API contract, not a discovered website.
+- id: catalog-operator
+  method: POST
+  path: /vulnerable/operator
+  field_path: [sku]
+  baseline: APPLE
+  records_path: [data]
+  id_path: [_id]
+  value_path: [sku]
+- id: catalog-operator-safe
+  method: POST
+  path: /safe/operator
+  field_path: [sku]
+  baseline: APPLE
+  records_path: [data]
+  id_path: [_id]
+  value_path: [sku]
+- id: inventory-post
+  method: POST
+  path: /v2/inventory/search
+  field_path: [selection, code]
+  baseline: WIDGET-42
+  records_path: [payload, items]
+  id_path: [itemId]
+  value_path: [code]
+- id: inventory-get
+  method: GET
+  path: /v2/inventory/search
+  query_parameter: criteria
+  field_path: [selection, code]
+  baseline: WIDGET-42
+  records_path: [payload, items]
+  id_path: [itemId]
+  value_path: [code]
+- id: inventory-post-safe
+  method: POST
+  path: /v2/inventory/safe-search
+  field_path: [selection, code]
+  baseline: WIDGET-42
+  records_path: [payload, items]
+  id_path: [itemId]
+  value_path: [code]
+- id: inventory-get-safe
+  method: GET
+  path: /v2/inventory/safe-search
+  query_parameter: criteria
+  field_path: [selection, code]
+  baseline: WIDGET-42
+  records_path: [payload, items]
+  id_path: [itemId]
+  value_path: [code]

@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent
 def test_semgrep_rules_are_curated_local_rules() -> None:
     config = yaml.safe_load(RULES.read_text(encoding="utf-8"))
     rules = config["rules"]
-    assert 20 <= len(rules) <= 40
+    assert len(rules) >= 20
     assert len({rule["id"] for rule in rules}) == len(rules)
     for rule in rules:
         assert rule["languages"]

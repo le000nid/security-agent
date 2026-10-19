@@ -10,7 +10,7 @@ MARKER = re.compile(r"\s*//\s*(ruleid|ok): (javascript-nosqli-[a-z-]+)\s*")
 
 
 def verify(payload: dict, source: Path) -> dict:
-    files = {p.resolve() for p in source.rglob("*.js")}
+    files = {p.resolve() for p in source.rglob("*") if p.suffix in {".js", ".ts"}}
     if not files or payload.get("errors") != []:
         raise ValueError("No source files or Semgrep reported errors")
     scanned = {Path(p).resolve() for p in payload["paths"]["scanned"]}

@@ -54,7 +54,24 @@ def test_web_index_health_benchmarks(web):
     assert "Сканирование" in page.text and "text/html" in page.headers["content-type"]
     assert "frame-ancestors 'none'" in page.headers["content-security-policy"]
     assert client.get("/healthz").json()["version"] == "0.4.1"
-    assert len(client.get("/api/benchmarks").json()) == 11
+    assert {b["id"] for b in client.get("/api/benchmarks").json()} == {
+        "sample-sast",
+        "juice-shop",
+        "demo-full",
+        "nosqli-sast",
+        "nosqli-dast",
+        "nosqli-mongo-full",
+        "nosqli-profile-catalog",
+        "nosqli-profile-catalog-safe",
+        "nosqli-profile-inventory",
+        "nosqli-profile-inventory-safe",
+        "nosqli-sast-matrix",
+        "sast-contours",
+        "dan-lab",
+        "ssrf-lab",
+        "spoofing-sast",
+        "security-key-lab",
+    }
     assert client.get("/api/llm").json()["connectivity"] == "unchecked"
     llm.factory.assert_not_called()
 
@@ -337,11 +354,16 @@ def test_llm_chat_schema_dynamic_metadata_and_failure_latch(web):
         "sample-sast",
         "juice-shop",
         "demo-full",
-        "sast-contours",
-        "dan-lab",
         "nosqli-sast",
         "nosqli-dast",
         "nosqli-mongo-full",
+        "nosqli-profile-catalog",
+        "nosqli-profile-catalog-safe",
+        "nosqli-profile-inventory",
+        "nosqli-profile-inventory-safe",
+        "nosqli-sast-matrix",
+        "sast-contours",
+        "dan-lab",
         "ssrf-lab",
         "spoofing-sast",
         "security-key-lab",
