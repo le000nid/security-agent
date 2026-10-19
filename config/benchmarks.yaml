@@ -89,3 +89,11 @@
   docker_service: nosqli-portable-api
   nosqli_profiles: [inventory-post-safe, inventory-get-safe]
   tags: [educational, nosqli, profiles, control]
+
+- id: nosqli-sast-matrix
+  name: NoSQLi SAST coverage matrix
+  description: Reviewed JavaScript and TypeScript cases for four NoSQLi rules; exact source-location acceptance.
+  description_ru: "80 SAST-примеров JavaScript и TypeScript: 40 опасных и 40 безопасных. Проверяется точное место каждой находки."
+  capabilities: [sast]
+  source_path: /targets/nosqli-variants
+  tags: [educational, source-only, nosqli, regression]

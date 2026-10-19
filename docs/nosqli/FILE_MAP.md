@@ -51,3 +51,14 @@
 | `benchmark/verify_nosqli_portable.py` | Сверяет результат каждого проверочного запуска |
 | `scripts/check-nosqli-portable.sh` | Полная проверка второго этапа в Docker |
 | `docs/nosqli/PORTABLE.md` | Как запустить, настроить и объяснить эту часть |
+
+## Расширение SAST
+
+| Файл | Назначение |
+|---|---|
+| `targets/nosqli-variants/` | Матрица опасных и безопасных примеров на JS и TS |
+| `config/nosqli-sast-cases.json` | Ожидаемый результат для каждой функции |
+| `benchmark/verify_nosqli_sast_matrix.py` | Проверяет инвентарь, точные места и общий отчёт |
+| `tests/nosqli/test_sast_matrix.py` | Проверяет ошибки самого механизма приёмки |
+| `scripts/check-nosqli-sast.sh` | Настоящий Semgrep через агента и проверка результата |
+| `docs/nosqli/SAST_COVERAGE.md` | Покрытие, ограничения и команды третьего этапа |

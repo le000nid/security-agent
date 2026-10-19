@@ -62,6 +62,7 @@ def test_builtin_registry():
         "nosqli-profile-catalog-safe",
         "nosqli-profile-inventory",
         "nosqli-profile-inventory-safe",
+        "nosqli-sast-matrix",
     }
     assert registry.trusted_hosts() == {
         "juice-shop",

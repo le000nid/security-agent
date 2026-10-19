@@ -5,6 +5,8 @@ on:
   pull_request:
     paths:
       - 'targets/nosqli-lab/**'
+      - 'targets/nosqli-variants/**'
+      - 'tests/nosqli/**'
       - 'config/**'
       - 'app/parser.py'
       - 'app/nuclei.py'
@@ -23,6 +25,8 @@ on:
     branches: ['feature/nosqli-*']
     paths:
       - 'targets/nosqli-lab/**'
+      - 'targets/nosqli-variants/**'
+      - 'tests/nosqli/**'
       - 'config/**'
       - 'benchmark/verify_nosqli*.py'
       - 'scripts/check-nosqli*.sh'
@@ -47,6 +51,8 @@ jobs:
         run: bash scripts/check-nosqli.sh
       - name: Portable profiles against two API contracts
         run: bash scripts/check-nosqli-portable.sh
+      - name: Exact JS and TS NoSQLi SAST coverage
+        run: bash scripts/check-nosqli-sast.sh
       - name: Save scanner reports and diagnostics
         if: always()
         uses: actions/upload-artifact@v4

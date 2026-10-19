@@ -109,25 +109,37 @@ rules:
   - id: javascript-nosqli-tainted-where
     languages: [javascript, typescript]
     severity: WARNING
-    message: User-controlled input reaches a NoSQL $where expression.
+    message: User-controlled input reaches a NoSQL $where expression; review query construction.
     mode: taint
     pattern-sources:
-      - pattern: $REQ.params.$FIELD
-      - pattern: $REQ.query.$FIELD
-      - pattern: $REQ.body.$FIELD
+      - pattern-either:
+          - pattern: $REQ.params.$FIELD
+          - pattern: $REQ.query.$FIELD
+          - pattern: $REQ.body.$FIELD
+          - pattern: $REQ.params[$FIELD]
+          - pattern: $REQ.query[$FIELD]
+          - pattern: $REQ.body[$FIELD]
+        exact: true
+    pattern-sanitizers:
+      - pattern: Number(...)
+        exact: true
+      - pattern: parseInt(...)
+        exact: true
+      - pattern: parseFloat(...)
+        exact: true
     pattern-sinks:
       - patterns:
-          - pattern-either:
-              - pattern: |
-                  $COLLECTION.find({..., $where: $QUERY, ...}, ...)
-              - pattern: |
-                  $COLLECTION.findOne({..., $where: $QUERY, ...}, ...)
+          - pattern: |
+              $COLLECTION.$METHOD({..., $where: $QUERY, ...}, ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(find|findOne|countDocuments)$'
           - focus-metavariable: $QUERY
     metadata:
       category: injection
       confidence: MEDIUM
       cwe: "CWE-943: Improper Neutralization of Special Elements in Data Query Logic"
-      recommendation: Validate input types and use field-based filters instead of constructing $where expressions.
+      recommendation: Avoid $where. Prefer field-based filters; convert numeric inputs before constructing expressions. String conversion alone is not safe for $where code.
 
   - id: javascript-nosqli-scalar-operator
     languages: [javascript, typescript]
@@ -135,19 +147,49 @@ rules:
     message: Untrusted input reaches a MongoDB filter field without scalar conversion; review whether operator objects are accepted.
     mode: taint
     pattern-sources:
-      - pattern: $REQ.body.$FIELD
-      - pattern: $REQ.query.$FIELD
-      - pattern: $REQ.params.$FIELD
+      - pattern-either:
+          - pattern: $REQ.body.$FIELD
+          - pattern: $REQ.query.$FIELD
+          - pattern: $REQ.params.$FIELD
+          - pattern: $REQ.body[$FIELD]
+          - pattern: $REQ.query[$FIELD]
+          - pattern: $REQ.params[$FIELD]
+        exact: true
     pattern-sanitizers:
       - pattern: String(...)
+        exact: true
       - pattern: Number(...)
+        exact: true
+      - pattern: parseInt(...)
+        exact: true
+      - pattern: parseFloat(...)
+        exact: true
     pattern-sinks:
       - patterns:
-          - pattern-either:
-              - pattern: |
-                  $COLLECTION.find({..., $KEY: $VALUE, ...}, ...)
-              - pattern: |
-                  $COLLECTION.findOne({..., $KEY: $VALUE, ...}, ...)
+          - pattern: |
+              $COLLECTION.$METHOD({..., $KEY: $VALUE, ...}, ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(find|findOne|countDocuments)$'
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: '^[a-zA-Z_][a-zA-Z0-9_]*$'
+          - focus-metavariable: $VALUE
+      - patterns:
+          - pattern: |
+              $COLLECTION.distinct($NAME, {..., $KEY: $VALUE, ...}, ...)
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: '^[a-zA-Z_][a-zA-Z0-9_]*$'
+          - focus-metavariable: $VALUE
+      - patterns:
+          - pattern: |
+              const $FILTER = {..., $KEY: $VALUE, ...};
+              ...
+              return $COLLECTION.$METHOD($FILTER, ...);
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(find|findOne|countDocuments)$'
           - metavariable-regex:
               metavariable: $KEY
               regex: '^[a-zA-Z_][a-zA-Z0-9_]*$'
@@ -156,27 +198,76 @@ rules:
       category: injection
       confidence: MEDIUM
       cwe: "CWE-943: Improper Neutralization of Special Elements in Data Query Logic"
-      recommendation: Enforce the expected scalar type and construct a field-based filter. Do not accept operator objects for scalar inputs.
+      recommendation: Enforce scalar types and construct fresh filters. TypeScript type assertions do not validate runtime input.
 
   - id: javascript-nosqli-untrusted-filter
     languages: [javascript, typescript]
     severity: WARNING
-    message: A user-supplied filter reaches a MongoDB query; review allowed operators and preservation of server-owned scope.
+    message: A user-supplied filter reaches a MongoDB query; review allowed operators and server-owned scope.
     mode: taint
     pattern-sources:
-      - pattern: $REQ.body.filter
-      - pattern: $REQ.query.filter
-    pattern-sanitizers:
-      - pattern: String(...)
-      - pattern: Number(...)
-    pattern-sinks:
       - patterns:
           - pattern-either:
-              - pattern: $COLLECTION.find($FILTER, ...)
-              - pattern: $COLLECTION.findOne($FILTER, ...)
+              - pattern: $REQ.body.$FIELD
+              - pattern: $REQ.query.$FIELD
+              - pattern: $REQ.body[$FIELD]
+              - pattern: $REQ.query[$FIELD]
+          - metavariable-regex:
+              metavariable: $FIELD
+              regex: "^[\"']?(filter|criteria|selector)[\"']?$"
+        exact: true
+    pattern-sanitizers:
+      - pattern: String(...)
+        exact: true
+      - pattern: Number(...)
+        exact: true
+      - pattern: parseInt(...)
+        exact: true
+      - pattern: parseFloat(...)
+        exact: true
+    pattern-sinks:
+      - patterns:
+          - pattern: $COLLECTION.$METHOD($FILTER, ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(find|findOne|countDocuments)$'
+          - focus-metavariable: $FILTER
+      - patterns:
+          - pattern: $COLLECTION.distinct($NAME, $FILTER, ...)
           - focus-metavariable: $FILTER
     metadata:
       category: injection
       confidence: MEDIUM
       cwe: "CWE-943: Improper Neutralization of Special Elements in Data Query Logic"
-      recommendation: Allowlist fields, reject operator objects and construct a fresh filter. Keep authorization scope server-owned.
+      recommendation: Allowlist fields and construct fresh filters. JSON.parse, object spread and Object.assign do not validate query operators.
+
+  - id: javascript-nosqli-untrusted-pipeline
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: Untrusted request data reaches a MongoDB aggregation pipeline; review allowed stages, operators and scope.
+    mode: taint
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.body.$FIELD
+              - pattern: $REQ.query.$FIELD
+              - pattern: $REQ.body[$FIELD]
+              - pattern: $REQ.query[$FIELD]
+          - metavariable-regex:
+              metavariable: $FIELD
+              regex: "^[\"']?(pipeline|filter|criteria|selector)[\"']?$"
+        exact: true
+    pattern-sanitizers:
+      - pattern: String(...)
+        exact: true
+      - pattern: Number(...)
+        exact: true
+    pattern-sinks:
+      - patterns:
+          - pattern: $COLLECTION.aggregate($PIPELINE, ...)
+          - focus-metavariable: $PIPELINE
+    metadata:
+      category: injection
+      confidence: MEDIUM
+      cwe: "CWE-943: Improper Neutralization of Special Elements in Data Query Logic"
+      recommendation: Build aggregation stages server-side from validated scalar fields. Do not accept arbitrary pipelines or $match filters from requests.
