@@ -1,0 +1,7 @@
+[
+  {"tool":"semgrep","title":"javascript-nosqli-scalar-operator","source":"SAST","category":"injection"},
+  {"tool":"semgrep","title":"javascript-nosqli-untrusted-filter","source":"SAST","category":"injection"},
+  {"tool":"nuclei","title":"MongoDB scalar operator injection","source":"DAST","category":"nosqli, injection, mongodb"},
+  {"tool":"nuclei","title":"MongoDB untrusted filter injection","source":"DAST","category":"nosqli, injection, mongodb"},
+  {"tool":"nuclei","title":"MongoDB server scope overwrite","source":"DAST","category":"nosqli, injection, mongodb"}
+]

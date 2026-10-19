@@ -128,3 +128,55 @@ rules:
       confidence: MEDIUM
       cwe: "CWE-943: Improper Neutralization of Special Elements in Data Query Logic"
       recommendation: Validate input types and use field-based filters instead of constructing $where expressions.
+
+  - id: javascript-nosqli-scalar-operator
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: Untrusted input reaches a MongoDB filter field without scalar conversion; review whether operator objects are accepted.
+    mode: taint
+    pattern-sources:
+      - pattern: $REQ.body.$FIELD
+      - pattern: $REQ.query.$FIELD
+      - pattern: $REQ.params.$FIELD
+    pattern-sanitizers:
+      - pattern: String(...)
+      - pattern: Number(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: |
+                  $COLLECTION.find({..., $KEY: $VALUE, ...}, ...)
+              - pattern: |
+                  $COLLECTION.findOne({..., $KEY: $VALUE, ...}, ...)
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: '^[a-zA-Z_][a-zA-Z0-9_]*$'
+          - focus-metavariable: $VALUE
+    metadata:
+      category: injection
+      confidence: MEDIUM
+      cwe: "CWE-943: Improper Neutralization of Special Elements in Data Query Logic"
+      recommendation: Enforce the expected scalar type and construct a field-based filter. Do not accept operator objects for scalar inputs.
+
+  - id: javascript-nosqli-untrusted-filter
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: A user-supplied filter reaches a MongoDB query; review allowed operators and preservation of server-owned scope.
+    mode: taint
+    pattern-sources:
+      - pattern: $REQ.body.filter
+      - pattern: $REQ.query.filter
+    pattern-sanitizers:
+      - pattern: String(...)
+      - pattern: Number(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $COLLECTION.find($FILTER, ...)
+              - pattern: $COLLECTION.findOne($FILTER, ...)
+          - focus-metavariable: $FILTER
+    metadata:
+      category: injection
+      confidence: MEDIUM
+      cwe: "CWE-943: Improper Neutralization of Special Elements in Data Query Logic"
+      recommendation: Allowlist fields, reject operator objects and construct a fresh filter. Keep authorization scope server-owned.

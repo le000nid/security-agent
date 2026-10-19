@@ -1,0 +1,51 @@
+name: NoSQLi MongoDB acceptance
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'targets/nosqli-lab/**'
+      - 'config/**'
+      - 'app/parser.py'
+      - 'app/nuclei.py'
+      - 'app/semgrep.py'
+      - 'benchmark/verify_nosqli*.py'
+      - 'scripts/check-nosqli.sh'
+      - 'docker-compose*.yml'
+      - 'Dockerfile'
+      - 'pyproject.toml'
+      - '.github/workflows/nosqli.yml'
+  push:
+    branches: ['feature/nosqli-*']
+    paths:
+      - 'targets/nosqli-lab/**'
+      - 'config/**'
+      - 'benchmark/verify_nosqli*.py'
+      - 'scripts/check-nosqli.sh'
+      - 'docker-compose*.yml'
+      - '.github/workflows/nosqli.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Real MongoDB, scanners and FULL report
+        run: bash scripts/check-nosqli.sh
+      - name: Save scanner reports and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nosqli-reports
+          path: runs/
+          if-no-files-found: ignore
+      - name: Stop lab services
+        if: always()
+        run: >-
+          docker compose -f docker-compose.yml -f docker-compose.nosqli.yml
+          --profile agent --profile nosqli-mongo --profile nosqli-tests down

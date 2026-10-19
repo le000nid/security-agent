@@ -20,6 +20,18 @@ def _as_tags(value: Any) -> list[str]:
     return []
 
 
+def _evidence(record: dict) -> str:
+    """Keep bounded scanner extracts with the rule identifier, never full HTTP logs."""
+    rule = str(record.get("matcher-name") or record.get("template-id") or "")[:200]
+    extracts = record.get("extracted-results")
+    if not isinstance(extracts, list):
+        return rule
+    snippets = [
+        value[:800] for value in extracts[:3] if isinstance(value, str) and value
+    ]
+    return (rule + ": " + "; ".join(snippets))[:1200] if snippets else rule
+
+
 def parse_nuclei_jsonl(path: Path) -> list[Finding]:
     """Normalize Nuclei JSONL records into Finding models."""
 
@@ -57,9 +69,7 @@ def parse_nuclei_jsonl(path: Path) -> list[Finding]:
                         or record.get("host")
                         or ""
                     ),
-                    evidence=str(
-                        record.get("matcher-name") or record.get("template-id") or ""
-                    ),
+                    evidence=_evidence(record),
                     description=info.get("description")
                     or record.get("description")
                     or "",

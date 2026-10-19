@@ -60,6 +60,7 @@ def test_web_index_health_benchmarks(web):
         "demo-full",
         "nosqli-sast",
         "nosqli-dast",
+        "nosqli-mongo-full",
     }
     assert client.get("/api/llm").json()["connectivity"] == "unchecked"
     llm.factory.assert_not_called()
@@ -345,6 +346,7 @@ def test_llm_chat_schema_dynamic_metadata_and_failure_latch(web):
         "demo-full",
         "nosqli-sast",
         "nosqli-dast",
+        "nosqli-mongo-full",
     }
     assert "target_url" not in call.args[1] and "source_path" not in call.args[1]
     fake.complete_json.return_value = '{"intent":"START_SCAN","command":"evil"}'

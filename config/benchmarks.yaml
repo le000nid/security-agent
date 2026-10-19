@@ -41,3 +41,14 @@
   target_url: http://nosqli-lab:3000
   docker_service: nosqli-lab
   tags: [educational, http, nosqli]
+
+- id: nosqli-mongo-full
+  name: NoSQLi MongoDB API
+  description: Same-application MongoDB benchmark with three read-only injection scenarios and safe counterparts.
+  description_ru: API с настоящей MongoDB. Три уязвимых сценария и безопасные пары; SAST и DAST проверяют одно приложение.
+  capabilities: [sast, dast]
+  source_path: /targets/nosqli-lab/src
+  target_url: http://nosqli-mongo-api:3000
+  docker_service: nosqli-mongo-api
+  expected_findings: nosqli-mongo-full.json
+  tags: [educational, same-application, nosqli, mongodb]

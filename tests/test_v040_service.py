@@ -57,8 +57,14 @@ def test_builtin_registry():
         "demo-full",
         "nosqli-sast",
         "nosqli-dast",
+        "nosqli-mongo-full",
     }
-    assert registry.trusted_hosts() == {"juice-shop", "demo-full", "nosqli-lab"}
+    assert registry.trusted_hosts() == {
+        "juice-shop",
+        "demo-full",
+        "nosqli-lab",
+        "nosqli-mongo-api",
+    }
     assert validate_target_url("http://demo-full:3000") == "http://demo-full:3000"
     assert Path(registry.get("demo-full").local_source()).is_dir()
     with pytest.raises(ValueError, match="benchmark_not_found"):
