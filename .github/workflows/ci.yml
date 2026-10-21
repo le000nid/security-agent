@@ -46,7 +46,8 @@ jobs:
       - name: SAST regression acceptance
         timeout-minutes: 10
         run: |
-          mkdir -p logs
+          # Prepare every bind mount before Docker can create it as root.
+          mkdir -p runs logs reports
           export AGENT_UID=$(id -u) AGENT_GID=$(id -g)
           docker compose --profile agent run --rm --no-deps --entrypoint python agent \
             -m benchmark.verify_sast_regressions --output-dir /agent/logs/sast-regression
