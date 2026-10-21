@@ -43,6 +43,21 @@ jobs:
           load: true
           tags: ai-security-agent:0.4.1
           cache-from: type=gha
+      - name: SAST regression acceptance
+        timeout-minutes: 10
+        run: |
+          mkdir -p logs
+          export AGENT_UID=$(id -u) AGENT_GID=$(id -g)
+          docker compose --profile agent run --rm --no-deps --entrypoint python agent \
+            -m benchmark.verify_sast_regressions --output-dir /agent/logs/sast-regression
+      - name: Upload SAST regression reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sast-regression-reports
+          path: logs/sast-regression/
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Scanner-only lab smoke
         run: |
           mkdir -p runs logs reports
@@ -70,44 +85,5 @@ jobs:
           PY
           docker compose --profile ui up -d --wait --wait-timeout 180 ui
           curl --fail http://127.0.0.1:8080/healthz
-      - name: SQLi hardening regression
-        timeout-minutes: 5
-        run: |
-          mkdir -p logs
-          docker compose --profile agent run --rm --no-deps --entrypoint semgrep agent scan \
-            --config /agent/config/semgrep.yaml \
-            --metrics=off --disable-version-check --strict --json \
-            /targets/sast-sqli-hardening > logs/sqli-hardening.json
-          python -m benchmark.verify_sqli_hardening logs/sqli-hardening.json
-      - name: SQLi variation regression
-        timeout-minutes: 5
-        run: |
-          mkdir -p logs
-          docker compose --profile agent run --rm --no-deps --entrypoint semgrep agent scan \
-            --config /agent/config/semgrep.yaml \
-            --metrics=off --disable-version-check --strict --json \
-            /targets/sast-sqli-variants > logs/sqli-variants.json
-          python -m benchmark.verify_sqli_variants logs/sqli-variants.json
-      - name: LFI variation regression
-        timeout-minutes: 5
-        run: |
-          mkdir -p logs
-          docker compose --profile agent run --rm --no-deps --entrypoint semgrep agent scan \
-            --config /agent/config/semgrep.yaml \
-            --metrics=off --disable-version-check --strict --json \
-            /targets/sast-lfi-variants > logs/lfi-variants.json
-          python -m benchmark.verify_lfi_variants logs/lfi-variants.json
-      - name: RFI variation regression
-        timeout-minutes: 5
-        run: |
-          mkdir -p logs
-          docker compose --profile agent run --rm --no-deps --entrypoint semgrep agent scan \
-            --config /agent/config/semgrep.yaml \
-            --metrics=off --disable-version-check --strict --json \
-            /targets/sast-rfi-variants > logs/rfi-variants.json
-          python -m benchmark.verify_rfi_variants logs/rfi-variants.json
-      - name: SAST scanner output contract
-        timeout-minutes: 5
-        run: docker compose --profile agent run --rm --no-deps --entrypoint python agent -m benchmark.verify_sast_contract
       - if: always()
         run: docker compose --profile ui --profile agent down

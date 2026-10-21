@@ -587,6 +587,18 @@ See the worked [benchmark extension guide](docs/BENCHMARKS.md), [architecture](d
 [validation record](docs/VALIDATION.md). Optional
 `AGENT_IMAGE=ghcr.io/owner/repository:0.4.1` selects your published image;
 otherwise bootstrap builds locally.
+
+## Проверки SAST, SQLi, LFI и RFI
+
+Полная проверка SQLi/LFI/RFI и ответа Semgrep одной командой:
+
+```powershell
+docker compose --profile agent run --rm --no-deps --entrypoint python agent -m benchmark.verify_sast_regressions
+```
+
+Общий результат сохраняется в `logs/sast-regression/summary.json`. Подготовка,
+состав проверок и разбор ошибок описаны в [памятке SAST](docs/SAST_CHECKS.md).
+
 ## Manual Windows real-provider acceptance (not automated)
 
 Review the safe .env example above and set your own key locally. Do not print it.
