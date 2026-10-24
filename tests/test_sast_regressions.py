@@ -96,3 +96,76 @@ def test_cli_exits_nonzero_for_failed_checks(tmp_path, monkeypatch):
     with pytest.raises(SystemExit) as error:
         runner.main()
     assert error.value.code == 1
+
+
+@pytest.fixture
+def baseline_scan(tmp_path):
+    source = tmp_path / "sast-contours"
+    source.mkdir()
+    for name in runner.BASELINE_FILES:
+        (source / name).touch()
+    return source, {
+        "paths": {"scanned": [str(source / n) for n in sorted(runner.BASELINE_FILES)]}
+    }
+
+
+def test_baseline_requires_all_twelve_files(baseline_scan):
+    source, payload = baseline_scan
+    assert runner.check_baseline_coverage(source, payload) == 12
+
+
+@pytest.mark.parametrize(
+    "damage",
+    ["missing-safe", "duplicate", "foreign-path", "missing-fixture", "extra-fixture"],
+)
+def test_baseline_rejects_incomplete_or_wrong_inventory(baseline_scan, damage):
+    source, payload = baseline_scan
+    scanned = payload["paths"]["scanned"]
+    if damage == "missing-safe":
+        scanned.remove(str(source / "benign.js"))
+    elif damage == "duplicate":
+        scanned.append(scanned[0])
+    elif damage == "foreign-path":
+        scanned[0] = str(source.parent / "other" / "benign.js")
+    elif damage == "missing-fixture":
+        (source / "benign.js").unlink()
+    else:
+        (source / "extra.py").touch()
+    with pytest.raises(ValueError):
+        runner.check_baseline_coverage(source, payload)
+
+
+def test_interrupt_replaces_old_success_with_current_progress(
+    tmp_path, monkeypatch, fake_checks
+):
+    output = tmp_path / "output"
+    output.mkdir()
+    (output / "summary.json").write_text('{"status":"passed"}')
+
+    def interrupted(*_args):
+        report = json.loads((output / "summary.json").read_text())
+        assert report["status"] == "running"
+        assert report["checks"]["sast-contours"]["status"] == "passed"
+        assert report["checks"]["sast-sqli-hardening"]["status"] == "running"
+        assert report["checks"]["scanner-contract"]["status"] == "pending"
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(runner, "check_variants", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        runner.run_all(tmp_path, output)
+    assert json.loads((output / "summary.json").read_text())["status"] == "running"
+    assert list(output.glob(".summary-*.tmp")) == []
+
+
+def test_atomic_report_failure_keeps_valid_previous_json(tmp_path, monkeypatch):
+    destination = tmp_path / "summary.json"
+    destination.write_text('{"status":"running"}')
+
+    def broken_replace(*_args):
+        raise OSError("injected replace failure")
+
+    monkeypatch.setattr(runner.Path, "replace", broken_replace)
+    with pytest.raises(OSError, match="injected replace failure"):
+        runner.save_report(tmp_path, {"status": "passed"})
+    assert json.loads(destination.read_text()) == {"status": "running"}
+    assert list(tmp_path.glob(".summary-*.tmp")) == []

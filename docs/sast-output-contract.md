@@ -25,3 +25,13 @@ Tests cover the parser boundary and four additional end-to-end simulated scanner
 failures. Earlier scanner mocks were updated to carry the same errors and scanned
 paths fields as the project's real Semgrep JSON, rather than incomplete stubs.
 These checks concern the SAST adapter and require no API/UI changes.
+
+## Source-controlled finding suppression
+
+Source code is untrusted during an independent audit. The adapter passes
+`--disable-nosem`: `nosemgrep` and `nosem` comments in scanned code cannot suppress
+findings. This intentionally overrides Semgrep's normal developer opt-out behavior.
+The real scanner contract check includes SQLi, LFI and RFI examples with inline
+and rule-specific preceding comments and requires all four findings.
+This closes inline suppression only; file ignore rules and incomplete language
+coverage remain separate limitations described above.

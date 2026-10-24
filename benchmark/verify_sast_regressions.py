@@ -2,7 +2,9 @@
 
 import argparse
 import json
+from collections import Counter
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 
 from app.resources import config_directory
 from app.semgrep import parse_semgrep_json, run_semgrep
@@ -13,9 +15,26 @@ from benchmark import (
     verify_sqli_hardening,
     verify_sqli_variants,
 )
+from benchmark.annotated_scan import fixture_name
 from benchmark.evaluator import evaluate
 
 ROOT = Path(__file__).resolve().parents[1]
+BASELINE_FILES = frozenset(
+    {
+        "benign.js",
+        "benign.php",
+        "benign-rfi-literal.php",
+        "benign-sqli-taint.js",
+        "benign-sqli-taint.php",
+        "benign-sqli-taint.py",
+        "vulnerable.js",
+        "vulnerable.php",
+        "vulnerable-rfi-literal.php",
+        "vulnerable-sqli-taint.js",
+        "vulnerable-sqli-taint.php",
+        "vulnerable-sqli-taint.py",
+    }
+)
 SUITES = (
     ("sast-sqli-hardening", 6, verify_sqli_hardening.verify),
     ("sast-sqli-variants", 14, verify_sqli_variants.verify),
@@ -31,8 +50,27 @@ def scan(source: Path, raw: Path):
     return findings, payload
 
 
+def check_baseline_coverage(source: Path, payload):
+    present = {
+        p.name for p in source.iterdir() if p.suffix in {".js", ".ts", ".py", ".php"}
+    }
+    if present != BASELINE_FILES:
+        raise ValueError(
+            f"Baseline fixture inventory mismatch: {sorted(present ^ BASELINE_FILES)}"
+        )
+    scanned = payload["paths"]["scanned"]
+    if not isinstance(scanned, list):
+        raise TypeError("Expected a scanned paths array")
+    names = Counter(fixture_name(p, source, BASELINE_FILES) for p in scanned)
+    if names != Counter(BASELINE_FILES):
+        raise ValueError("Not all baseline fixtures were scanned exactly once")
+    return len(scanned)
+
+
 def check_baseline(targets: Path, output: Path):
-    findings, _ = scan(targets / "sast-contours", output / "sast-contours.json")
+    source = targets / "sast-contours"
+    findings, payload = scan(source, output / "sast-contours.json")
+    scanned_files = check_baseline_coverage(source, payload)
     expected = json.loads(
         (config_directory() / "expected/sast-contours.json").read_text(encoding="utf-8")
     )
@@ -44,7 +82,12 @@ def check_baseline(targets: Path, output: Path):
         or evaluation["unexpected_findings"]
     ):
         raise ValueError(f"sast-contours regression: {evaluation}")
-    return {"expected_rule_ids": 6, "detected_rule_ids": 6, "findings": len(findings)}
+    return {
+        "expected_rule_ids": 6,
+        "detected_rule_ids": 6,
+        "findings": len(findings),
+        "scanned_files": scanned_files,
+    }
 
 
 def check_variants(targets: Path, output: Path, name, count, verifier):
@@ -62,29 +105,51 @@ def check_variants(targets: Path, output: Path, name, count, verifier):
     }
 
 
+def save_report(output: Path, report):
+    temporary = None
+    try:
+        with NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=output,
+            prefix=".summary-",
+            suffix=".tmp",
+            delete=False,
+        ) as stream:
+            temporary = Path(stream.name)
+            json.dump(report, stream, ensure_ascii=False, indent=2)
+        temporary.replace(output / "summary.json")
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
 def run_all(targets: Path, output: Path):
     output.mkdir(parents=True, exist_ok=True)
-    checks = {}
+    names = ["sast-contours", *(name for name, _, _ in SUITES), "scanner-contract"]
+    checks = {name: {"status": "pending"} for name in names}
+    report = {"status": "running", "checks": checks}
+    save_report(output, report)
 
     def record(name, operation):
+        checks[name] = {"status": "running"}
+        save_report(output, report)
         try:
             checks[name] = {"status": "passed", "details": operation()}
         except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
             checks[name] = {"status": "failed", "error": str(exc)}
+        save_report(output, report)
 
     record("sast-contours", lambda: check_baseline(targets, output))
     for name, count, verifier in SUITES:
         record(name, lambda: check_variants(targets, output, name, count, verifier))
     record("scanner-contract", verify_sast_contract.verify)
-    report = {
-        "status": "passed"
+    report["status"] = (
+        "passed"
         if all(check["status"] == "passed" for check in checks.values())
-        else "failed",
-        "checks": checks,
-    }
-    (output / "summary.json").write_text(
-        json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
+        else "failed"
     )
+    save_report(output, report)
     return report
 
 

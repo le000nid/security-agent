@@ -460,3 +460,4 @@ def test_semgrep_runner(monkeypatch, tmp_path):
     assert "--metrics=off" in command and "--json" in command
     assert command[-1] == str(tmp_path.resolve())
     assert "--autofix" not in command
+    assert "--disable-nosem" in command

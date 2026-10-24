@@ -48,6 +48,7 @@ def run_semgrep(source: Path, output: Path) -> None:
                     "--metrics=off",
                     "--disable-version-check",
                     "--strict",
+                    "--disable-nosem",
                     str(source),
                 ],
                 stdout=raw,
