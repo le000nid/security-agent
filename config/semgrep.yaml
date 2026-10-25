@@ -40,7 +40,7 @@ rules:
       - pattern: $KEY = $VALUE
       - metavariable-regex:
           metavariable: $KEY
-          regex: (?i)^(api_key|secret_key|access_token|auth_token|password)$
+          regex: (?i)^(api_?key|secret_?key|access_?token|auth_?token|client_?secret|token|password)$
       - metavariable-regex:
           metavariable: $VALUE
           regex: ^["'][^"']{8,}["']$
@@ -77,7 +77,7 @@ rules:
           - pattern: var $KEY = $VALUE
       - metavariable-regex:
           metavariable: $KEY
-          regex: (?i)^(apiKey|secretKey|accessToken|authToken|password)$
+          regex: (?i)^(api_?key|secret_?key|access_?token|auth_?token|client_?secret|token|password)$
       - metavariable-regex:
           metavariable: $VALUE
           regex: ^["'`][^"'`]{8,}["'`]$
@@ -85,6 +85,45 @@ rules:
       category: secrets
       confidence: MEDIUM
       recommendation: Load credentials from an approved secret store or runtime environment.
+  - id: generic-labeled-secret-candidate
+    languages:
+    - generic
+    severity: WARNING
+    message: A credential-like label has a literal value. Review this candidate; it is not a verified credential or CTF flag.
+    paths:
+      include:
+      - '*.txt'
+      - '*.md'
+      - '*.json'
+      - '*.yaml'
+      - '*.yml'
+      - '*.ini'
+      - '*.conf'
+      - '*.cfg'
+      - '*.env'
+      - '*.properties'
+      - '*.toml'
+    patterns:
+    - pattern-regex: >-
+        (?im)^[ \t]*(?:export[ \t]+)?["']?(?:api[_-]?key|secret(?:[_-]?key)?|(?:access|auth)[_-]?token|token|client[_-]?secret|password|flag)["']?[ \t]*[:=][ \t]*(?P<QUOTE>["']?)(?P<VALUE>[A-Za-z0-9_./+=:@!%{}-]{8,256})(?P=QUOTE)[ \t]*[,;]?[ \t]*(?:[#;][^\r\n]*)?\r?$
+    - metavariable-regex:
+        metavariable: $VALUE
+        regex: (?i)^(?!(?:change[_-]?me|replace[_-]?me|not[_-]configured|redacted|your[_-](?:api[_-]?key|token|password)|example[_-](?:key|token|password))$).+
+    metadata:
+      category: secrets
+      confidence: MEDIUM
+      recommendation: Verify the candidate in its context. Store real credentials outside source files; this match alone does not select a CTF flag.
+  - id: generic-pem-private-key-candidate
+    languages:
+    - generic
+    severity: WARNING
+    message: A PEM private-key block is present. Review whether it is a real exposed key or a synthetic fixture.
+    pattern-regex: >-
+      (?m)^-----BEGIN (?P<KIND>(?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY)-----\r?\n(?:[A-Za-z0-9+/=]{32,}\r?\n){1,64}-----END (?P=KIND)-----[ \t]*\r?$
+    metadata:
+      category: secrets
+      confidence: MEDIUM
+      recommendation: Verify the key material without executing it. Remove exposed real private keys from source and rotate them; synthetic blocks may also match.
   - id: javascript-child-process-exec
     languages: [javascript, typescript]
     severity: WARNING

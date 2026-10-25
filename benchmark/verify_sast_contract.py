@@ -1,4 +1,4 @@
-"""Real Semgrep acceptance: clean code is valid; scanning no code is not."""
+"""Accept clean code/text, reject empty scans, and prevent source suppression."""
 
 import json
 from collections import Counter
@@ -59,21 +59,24 @@ def verify():
         clean = root / "clean"
         clean.mkdir()
         (clean / "example.py").write_text("pass\n", encoding="utf-8")
+        (clean / "notes.txt").write_text(
+            "Ordinary household notes.\n", encoding="utf-8"
+        )
         clean_raw = root / "clean.json"
         run_semgrep(clean, clean_raw)
         if parse_semgrep_json(clean_raw):
             raise ValueError("The clean source produced unexpected findings")
         clean_data = json.loads(clean_raw.read_text(encoding="utf-8"))
-        if len(clean_data["paths"]["scanned"]) != 1:
-            raise ValueError("Expected exactly one clean source file scanned")
+        if {Path(p).name for p in clean_data["paths"]["scanned"]} != {
+            "example.py",
+            "notes.txt",
+        }:
+            raise ValueError("Expected clean code and ordinary text to be scanned")
 
         suppression_findings = verify_suppression(root)
 
         no_code = root / "no-code"
         no_code.mkdir()
-        (no_code / "notes.txt").write_text(
-            "No supported source code here.\n", encoding="utf-8"
-        )
         empty_raw = root / "no-code.json"
         run_semgrep(no_code, empty_raw)
         empty_data = json.loads(empty_raw.read_text(encoding="utf-8"))
@@ -83,9 +86,9 @@ def verify():
             parse_semgrep_json(empty_raw)
         except ValueError:
             return {
-                "clean_files": 1,
+                "clean_files": 2,
                 "clean_findings": 0,
-                "no_code_scan": "rejected",
+                "empty_scan": "rejected",
                 "suppression_findings": suppression_findings,
             }
         raise ValueError("A scan of zero source files was accepted as clean")

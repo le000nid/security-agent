@@ -18,16 +18,17 @@ def fake_checks(monkeypatch):
 
     monkeypatch.setattr(runner, "check_variants", variants)
     monkeypatch.setattr(
-        runner.verify_sast_contract, "verify", lambda: {"no_code_scan": "rejected"}
+        runner.verify_sast_contract, "verify", lambda: {"empty_scan": "rejected"}
     )
     return calls
 
 
-def test_all_six_checks_are_recorded(tmp_path, fake_checks):
+def test_all_seven_checks_are_recorded(tmp_path, fake_checks):
     report = runner.run_all(tmp_path, tmp_path / "output")
     assert report["status"] == "passed"
     assert set(report["checks"]) == {
         "sast-contours",
+        "sast-secrets",
         "sast-sqli-hardening",
         "sast-sqli-variants",
         "sast-lfi-variants",
@@ -56,7 +57,7 @@ def test_failure_is_saved_and_other_checks_continue(
     (output / "summary.json").write_text('{"status":"passed"}')
     report = runner.run_all(tmp_path, output)
     assert report["status"] == "failed"
-    assert len(report["checks"]) == 6
+    assert len(report["checks"]) == 7
     assert any(check["status"] == "passed" for check in report["checks"].values())
     assert any(
         check.get("error") == "injected acceptance failure"
@@ -146,7 +147,7 @@ def test_interrupt_replaces_old_success_with_current_progress(
         report = json.loads((output / "summary.json").read_text())
         assert report["status"] == "running"
         assert report["checks"]["sast-contours"]["status"] == "passed"
-        assert report["checks"]["sast-sqli-hardening"]["status"] == "running"
+        assert report["checks"]["sast-secrets"]["status"] == "running"
         assert report["checks"]["scanner-contract"]["status"] == "pending"
         raise KeyboardInterrupt
 

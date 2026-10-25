@@ -32,3 +32,15 @@
   source_path: /targets/sast-contours
   expected_findings: sast-contours.json
   tags: [educational, source-only, sast, curated]
+- id: sast-secrets
+  name: Поиск кандидатов в секреты
+  description: Статический поиск литералов в Python/JavaScript/TypeScript, текстах и конфигурациях, а также PEM-блоков. Все значения синтетические.
+  description_ru: Кандидаты в секреты с контрольными примерами. Не определяет правильный CTF-флаг и не вызывает модель.
+  capabilities:
+  - sast
+  source_path: /targets/sast-secrets
+  expected_findings: sast-secrets.json
+  tags:
+  - educational
+  - source-only
+  - synthetic-secret

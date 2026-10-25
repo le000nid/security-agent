@@ -53,6 +53,7 @@ def test_builtin_registry():
     registry = BenchmarkRegistry.load()
     assert {b.id for b in registry.list()} == {
         "sample-sast",
+        "sast-secrets",
         "juice-shop",
         "demo-full",
         "sast-contours",

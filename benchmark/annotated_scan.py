@@ -49,8 +49,11 @@ def verify(payload, fixtures, files):
     scanned = payload["paths"]["scanned"]
     if not isinstance(scanned, list):
         raise TypeError("Expected a scanned paths array")
-    names = Counter(fixture_name(p, fixtures, files) for p in scanned)
-    if names != Counter(files):
+    # Generic rules can also scan the suite's documentation. It is optional
+    # scan input, never an allowed finding or a replacement for a code fixture.
+    docs = {"README.md"} if (fixtures / "README.md").is_file() else set()
+    names = Counter(fixture_name(p, fixtures, files | docs) for p in scanned)
+    if set(names) - docs != files or any(count != 1 for count in names.values()):
         raise ValueError("Not all expected fixtures were scanned exactly once")
     if not isinstance(payload.get("results"), list):
         raise TypeError("Expected a results array")

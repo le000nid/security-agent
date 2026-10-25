@@ -1,0 +1,4 @@
+auth-token: ${TRAINING_AUTH_TOKEN}
+password: not-configured
+api_key: YOUR_API_KEY
+secret: REDACTED

@@ -26,6 +26,7 @@ not extra Planner requests. `deterministic` remains an alias for `scan`.
 | ID | Default scope | Source / service | Curated baseline |
 | --- | --- | --- | --- |
 | sample-sast | SAST | `/targets/sample-app` | Nine Semgrep findings |
+| sast-secrets | SAST | `/targets/sast-secrets` | Twelve synthetic candidates; eight clean files |
 | juice-shop | DAST | `http://juice-shop:3000` | No fixed acceptance baseline |
 | demo-full | FULL | `/targets/demo-full` and `http://demo-full:3000` | Four SAST + three DAST indicators |
 

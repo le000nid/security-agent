@@ -54,7 +54,7 @@ def test_web_index_health_benchmarks(web):
     assert "Сканирование" in page.text and "text/html" in page.headers["content-type"]
     assert "frame-ancestors 'none'" in page.headers["content-security-policy"]
     assert client.get("/healthz").json()["version"] == "0.4.1"
-    assert len(client.get("/api/benchmarks").json()) == 4
+    assert len(client.get("/api/benchmarks").json()) == 5
     assert client.get("/api/llm").json()["connectivity"] == "unchecked"
     llm.factory.assert_not_called()
 
@@ -335,6 +335,7 @@ def test_llm_chat_schema_dynamic_metadata_and_failure_latch(web):
     payload = json.loads(call.args[1])
     assert {b["id"] for b in payload["benchmarks"]} == {
         "sample-sast",
+        "sast-secrets",
         "juice-shop",
         "demo-full",
         "sast-contours",

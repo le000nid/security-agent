@@ -1,0 +1,7 @@
+Shopping list: tea, bread, apples.
+recipe: TRAINING_ONLY_ORDINARY_NOTE_34
+password = short
+api_key = replace_me
+token = ${TRAINING_RUNTIME_TOKEN}
+The word secret alone does not identify a key.
+An unlabeled value needs semantic analysis: TRAINING_ONLY_OPAQUE_VALUE_35

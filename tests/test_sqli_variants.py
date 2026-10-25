@@ -47,6 +47,29 @@ def test_complete_report_is_accepted(report):
     }
 
 
+def test_scanned_documentation_does_not_replace_source_fixtures(report):
+    report["paths"]["scanned"].append("/targets/sast-sqli-variants/README.md")
+    assert checker.verify(report)["findings"] == 14
+    report["paths"]["scanned"].pop(0)
+    with pytest.raises(ValueError, match="Not all expected fixtures"):
+        checker.verify(report)
+
+
+def test_finding_in_documentation_is_not_silently_ignored(report):
+    report["paths"]["scanned"].append("/targets/sast-sqli-variants/README.md")
+    item = copy.deepcopy(report["results"][0])
+    item["path"] = "/targets/sast-sqli-variants/README.md"
+    report["results"].append(item)
+    with pytest.raises(ValueError, match="Unexpected scan path"):
+        checker.verify(report)
+
+
+def test_duplicate_documentation_scan_is_rejected(report):
+    report["paths"]["scanned"].extend(["/targets/sast-sqli-variants/README.md"] * 2)
+    with pytest.raises(ValueError, match="Not all expected fixtures"):
+        checker.verify(report)
+
+
 @pytest.mark.parametrize(
     "scenario",
     [

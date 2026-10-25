@@ -12,6 +12,7 @@ from benchmark import (
     verify_lfi_variants,
     verify_rfi_variants,
     verify_sast_contract,
+    verify_secrets,
     verify_sqli_hardening,
     verify_sqli_variants,
 )
@@ -36,6 +37,7 @@ BASELINE_FILES = frozenset(
     }
 )
 SUITES = (
+    ("sast-secrets", 12, verify_secrets.verify),
     ("sast-sqli-hardening", 6, verify_sqli_hardening.verify),
     ("sast-sqli-variants", 14, verify_sqli_variants.verify),
     ("sast-lfi-variants", 14, verify_lfi_variants.verify),

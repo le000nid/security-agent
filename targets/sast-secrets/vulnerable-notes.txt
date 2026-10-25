@@ -1,0 +1,3 @@
+Shopping list: tea, bread, apples.
+secret: TRAINING_ONLY_TEXT_SECRET_32
+flag = "TRAINING_ONLY{candidate_33}"
