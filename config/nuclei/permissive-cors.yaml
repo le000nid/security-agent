@@ -1,0 +1,16 @@
+id: local-http-permissive-cors-wildcard
+info:
+  name: Permissive wildcard CORS indicator
+  author: ai-security-agent
+  severity: low
+  tags: headers,cors,configuration
+  description: The response allows any origin through Access-Control-Allow-Origin wildcard.
+  remediation: Restrict allowed origins when cross-origin access is not intended to be public.
+http:
+  - method: GET
+    path: ["{{BaseURL}}"]
+    redirects: false
+    matchers:
+      - type: regex
+        part: header
+        regex: ["(?im)^access-control-allow-origin:[[:space:]]*\\*[[:space:]]*$"]

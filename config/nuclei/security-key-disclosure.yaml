@@ -1,0 +1,23 @@
+id: security-key-disclosure
+info:
+  name: Synthetic training key disclosure
+  author: security-agent
+  severity: medium
+  tags: secrets,simulation
+  description: A local training endpoint exposes a synthetic key while its safe control does not.
+  remediation: Never return credentials from HTTP endpoints; load real secrets from an approved runtime store.
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/key/exposed"
+      - "{{BaseURL}}/key/safe"
+    redirects: false
+    req-condition: true
+    matchers:
+      - type: dsl
+        name: synthetic-key-differential
+        dsl:
+          - >-
+            status_code_1 == 200 && status_code_2 == 200 &&
+            contains(body_1, 'TRAINING_KEY_SECURITY_AGENT_74B2') &&
+            !contains(body_2, 'TRAINING_KEY_SECURITY_AGENT_74B2')

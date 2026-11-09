@@ -1,0 +1,18 @@
+id: local-http-missing-cache-control
+info:
+  name: Missing Cache-Control header
+  author: ai-security-agent
+  severity: info
+  tags: headers,configuration
+  description: The response does not state an explicit Cache-Control policy.
+  remediation: Define caching behavior based on the sensitivity and mutability of the response.
+http:
+  - method: GET
+    path: ["{{BaseURL}}"]
+    redirects: false
+    matchers:
+      - type: word
+        part: header
+        words: ["Cache-Control:"]
+        case-insensitive: true
+        negative: true

@@ -1,6 +1,201 @@
 services:
   juice-shop:
-    image: bkimminich/juice-shop
-    container_name: juice-shop
+    image: bkimminich/juice-shop:v20.2.0
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/nodejs/bin/node",
+          "-e",
+          "require('http').get('http://127.0.0.1:3000',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+  demo-full:
+    build: ./targets/demo-full
+    image: ai-security-demo-full:0.4.1
+    user: "1000:1000"
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    ports: ["127.0.0.1:3001:3000"]
+    volumes: ["./targets/demo-full:/lab:ro"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+  dan-lab:
+    build: ./targets/dan-lab
+    image: ai-security-dan-lab:0.4.1
+    user: "1000:1000"
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    ports: ["127.0.0.1:3002:3000"]
+    volumes: ["./targets/dan-lab:/lab:ro"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+  nosqli-lab:
+    image: bkimminich/juice-shop:v20.2.0
+    environment:
+      NODE_CONFIG: '{"challenges":{"safetyMode":"disabled"}}'
+    ports: ["127.0.0.1:3004:3000"]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    healthcheck:
+      test: ["CMD", "/nodejs/bin/node", "-e", "require('http').get('http://127.0.0.1:3000',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+  nosqli-mongo:
+    image: mongo:8.0.17
+    profiles: ["nosqli-mongo"]
+    user: "999:999"
+    command: ["mongod", "--bind_ip_all", "--quiet"]
+    networks: ["nosqli-db"]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "quit(db.adminCommand({ping:1}).ok ? 0 : 1)"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+  nosqli-mongo-api:
+    profiles: ["nosqli-mongo"]
+    build: ./targets/nosqli-lab
+    image: ai-security-nosqli-lab:0.4.1
+    user: "1000:1000"
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    environment:
+      MONGODB_URI: mongodb://nosqli-mongo:27017
+    networks: ["default", "nosqli-db"]
+    ports: ["127.0.0.1:3005:3000"]
+    depends_on:
+      nosqli-mongo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+  ssrf-lab:
+    build: ./targets/ssrf-lab
+    image: ai-security-ssrf-lab:0.4.1
+    user: "1000:1000"
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    ports: ["127.0.0.1:3006:3000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+  security-key-lab:
+    build: ./targets/security-key-lab
+    image: ai-security-key-lab:0.4.1
+    user: "1000:1000"
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    ports: ["127.0.0.1:3007:3000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+  nosqli-portable-api:
+    profiles:
+    - nosqli-portable
+    build: ./targets/nosqli-lab
+    image: ai-security-nosqli-lab:0.4.1
+    command:
+    - node
+    - portable-src/server.js
+    user: 1000:1000
+    read_only: true
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    environment:
+      MONGODB_URI: mongodb://nosqli-mongo:27017
+    networks:
+    - default
+    - nosqli-db
+    ports:
+    - 127.0.0.1:3008:3000
+    depends_on:
+      nosqli-mongo:
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD
+      - node
+      - -e
+      - fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+  agent: &agent
+    profiles: ["agent"]
+    build: .
+    image: ${AGENT_IMAGE:-ai-security-agent:0.4.1}
+    user: "${AGENT_UID:-1000}:${AGENT_GID:-1000}"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    environment:
+      LLM_PROVIDER: ${LLM_PROVIDER:-}
+      LLM_MODEL: ${LLM_MODEL:-auto}
+      LLM_MODEL_POLICY: ${LLM_MODEL_POLICY:-fast}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      AGENT_MAX_STEPS: ${AGENT_MAX_STEPS:-8}
+      AGENT_MAX_PLANNER_CALLS: ${AGENT_MAX_PLANNER_CALLS:-8}
+      LLM_PLANNER_MAX_TOKENS: ${LLM_PLANNER_MAX_TOKENS:-320}
+      LLM_PLANNER_RETRY_MAX_TOKENS: ${LLM_PLANNER_RETRY_MAX_TOKENS:-512}
+      LLM_ENRICHMENT_BATCH_SIZE: ${LLM_ENRICHMENT_BATCH_SIZE:-1}
+      LLM_ENRICHMENT_MAX_TOKENS: ${LLM_ENRICHMENT_MAX_TOKENS:-1800}
+      LLM_ENRICHMENT_RETRY_MAX_TOKENS: ${LLM_ENRICHMENT_RETRY_MAX_TOKENS:-3200}
+      LLM_BRIEF_ENABLED: ${LLM_BRIEF_ENABLED:-true}
+      LLM_BRIEF_MAX_TOKENS: ${LLM_BRIEF_MAX_TOKENS:-6000}
+      LLM_BRIEF_RETRY_MAX_TOKENS: ${LLM_BRIEF_RETRY_MAX_TOKENS:-10000}
+      LLM_CHAT_MAX_TOKENS: ${LLM_CHAT_MAX_TOKENS:-6000}
+      LLM_CHAT_RETRY_MAX_TOKENS: ${LLM_CHAT_RETRY_MAX_TOKENS:-10000}
+      LLM_REPORT_TONE: ${LLM_REPORT_TONE:-professional}
+      LLM_REPORT_LANGUAGE: ${LLM_REPORT_LANGUAGE:-ru}
+    volumes:
+      - ./logs:/agent/logs
+      - ./reports:/agent/reports
+      - ./runs:/agent/runs
+      - ./targets:/targets:ro
+  ui:
+    <<: *agent
+    profiles: ["ui"]
+    command: ["ui", "--host", "0.0.0.0", "--port", "8080"]
+    ports: ["127.0.0.1:8080:8080"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+networks:
+  nosqli-db:
+    internal: true

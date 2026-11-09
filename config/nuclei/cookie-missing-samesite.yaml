@@ -1,0 +1,16 @@
+id: local-http-cookie-missing-samesite
+info:
+  name: Cookie response lacks SameSite indicator
+  author: ai-security-agent
+  severity: low
+  tags: headers,cookies,configuration
+  description: A Set-Cookie header exists but the response headers do not include a SameSite attribute.
+  remediation: Set an appropriate SameSite attribute on application cookies.
+http:
+  - method: GET
+    path: ["{{BaseURL}}"]
+    redirects: false
+    matchers:
+      - type: dsl
+        dsl:
+          - "contains(to_lower(all_headers), 'set-cookie:') && !contains(to_lower(all_headers), 'samesite=')"

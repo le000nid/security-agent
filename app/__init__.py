@@ -1,0 +1,3 @@
+"""Local-only security testing harness."""
+
+__version__ = "0.4.1"

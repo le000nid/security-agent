@@ -1,0 +1,52 @@
+id: nosqli-mongo-scope-overwrite
+info:
+  name: MongoDB server scope overwrite
+  author: Step762
+  severity: high
+  description: 'Read-only MongoDB lab scenario: scope-overwrite. Compares a valid baseline, a modified filter and an empty-result control. Fixed laboratory records are used as evidence, not reflection of the request.'
+  remediation: Validate input types and allowlisted fields; build a fresh filter and keep owner constraints server-controlled.
+  tags: nosqli,injection,mongodb
+variables:
+  route_prefix: vulnerable
+http:
+- raw:
+  - |
+    POST /{{route_prefix}}/scope HTTP/1.1
+    Host: {{Hostname}}
+    Content-Type: application/json
+
+    {"filter":{}}
+  - |
+    POST /{{route_prefix}}/scope HTTP/1.1
+    Host: {{Hostname}}
+    Content-Type: application/json
+
+    {"filter":{"owner":"bob"}}
+  - |
+    POST /{{route_prefix}}/scope HTTP/1.1
+    Host: {{Hostname}}
+    Content-Type: application/json
+
+    {"filter":{"sku":"MISSING"}}
+  redirects: false
+  req-condition: true
+  matchers:
+  - type: dsl
+    condition: and
+    dsl:
+    - status_code_1 == 200 && status_code_2 == 200 && status_code_3 == 200
+    - 'contains(tolower(header_1), ''x-nosqli-lab: mongodb-v1'')'
+    - 'contains(tolower(header_2), ''x-nosqli-lab: mongodb-v1'')'
+    - 'contains(tolower(header_3), ''x-nosqli-lab: mongodb-v1'')'
+    - contains(json_minify(body_1), 'alice-order') && !contains(json_minify(body_1), 'bob-order')
+    - contains(json_minify(body_2), 'bob-order')
+    - json_minify(body_3) == json_minify(hex_decode('7b22737461747573223a2273756363657373222c2264617461223a5b5d7d'))
+    - '!contains(json_minify(body_2), ''alice-order'')'
+    - 'contains(tolower(header_1), ''content-type: application/json'')'
+    - 'contains(tolower(header_2), ''content-type: application/json'')'
+    - 'contains(tolower(header_3), ''content-type: application/json'')'
+  extractors:
+  - type: dsl
+    name: query-comparison
+    dsl:
+    - '''baseline='' + body_1 + ''; changed='' + body_2 + ''; control='' + body_3'

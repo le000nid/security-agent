@@ -1,0 +1,9 @@
+[
+  {"tool": "semgrep", "title": "python-debug-enabled", "source": "SAST", "category": "configuration"},
+  {"tool": "semgrep", "title": "python-subprocess-shell-true", "source": "SAST", "category": "command-execution"},
+  {"tool": "semgrep", "title": "python-unsafe-pickle-deserialization", "source": "SAST", "category": "deserialization"},
+  {"tool": "semgrep", "title": "python-obvious-hardcoded-secret", "source": "SAST", "category": "secrets"},
+  {"tool": "nuclei", "title": "Missing Content-Security-Policy header", "source": "DAST", "category": "headers, configuration"},
+  {"tool": "nuclei", "title": "Missing Referrer-Policy header", "source": "DAST", "category": "headers, privacy"},
+  {"tool": "nuclei", "title": "Permissive wildcard CORS indicator", "source": "DAST", "category": "headers, cors, configuration"}
+]

@@ -1,0 +1,16 @@
+id: local-http-missing-frame-protection
+info:
+  name: Missing browser frame protection
+  author: ai-security-agent
+  severity: info
+  tags: headers,configuration
+  description: The response has neither X-Frame-Options nor a CSP frame-ancestors directive.
+  remediation: Set frame-ancestors in CSP or use X-Frame-Options where appropriate.
+http:
+  - method: GET
+    path: ["{{BaseURL}}"]
+    redirects: false
+    matchers:
+      - type: dsl
+        dsl:
+          - "!contains(to_lower(all_headers), 'x-frame-options:') && !contains(to_lower(all_headers), 'frame-ancestors')"
