@@ -8,6 +8,7 @@ __pycache__/
 !.env.example
 runs/
 .validation/
+node_modules/
 .vscode/
 .idea/
 *.egg-info/

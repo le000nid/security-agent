@@ -39,16 +39,42 @@ def test_run_nuclei_fails_when_binary_is_missing(
         run_nuclei("http://localhost:3000", tmp_path / "raw.jsonl")
 
 
-def test_all_curated_templates_are_local_http_gets() -> None:
+def test_curated_templates_use_reviewed_http_requests() -> None:
+    import yaml
+
+    post_templates = {
+        "nosqli-mongo-scalar-operator": "operator",
+        "nosqli-mongo-whole-filter": "filter",
+        "nosqli-mongo-scope-overwrite": "scope",
+    }
     templates = sorted(TEMPLATE_DIRECTORY.glob("*.yaml"))
-    assert 10 <= len(templates) <= 30
+    assert len(templates) >= 10
+    ids = []
     for template in templates:
         text = template.read_text(encoding="utf-8")
-        assert "http:" in text
-        assert "method: GET" in text or "method: POST" in text or "- raw:" in text
-        assert "{{BaseURL}}" in text or "{{Hostname}}" in text
-        assert "redirects: false" in text
+        config = yaml.safe_load(text)
+        ids.append(config["id"])
+        assert set(config) <= {"id", "info", "variables", "http"}
+        for request in config["http"]:
+            assert request["redirects"] is False
+            if config["id"] in post_templates:
+                route = post_templates[config["id"]]
+                assert config["variables"] == {"route_prefix": "vulnerable"}
+                assert request["req-condition"] is True
+                assert len(request["raw"]) == 3
+                for raw in request["raw"]:
+                    assert raw.startswith(
+                        f"POST /{{{{route_prefix}}}}/{route} HTTP/1.1\n"
+                    )
+                    assert "Host: {{Hostname}}\n" in raw
+                    assert "Content-Type: application/json\n" in raw
+                assert "raw" in request and "path" not in request
+            else:
+                assert request["method"] == "GET"
+                assert "{{BaseURL}}" in text
         assert not any(
             forbidden in text
             for forbidden in ("interactsh", "headless:", "dns:", "tcp:", "payloads:")
         )
+    assert len(ids) == len(set(ids))
+    assert set(post_templates) <= set(ids)

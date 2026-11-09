@@ -1,466 +1,612 @@
 rules:
-  - id: python-debug-enabled
-    languages: [python]
-    severity: WARNING
-    message: Debug mode should be disabled outside the local development environment.
-    pattern: $APP.run(..., debug=True, ...)
-    metadata:
-      category: configuration
-      confidence: HIGH
-      recommendation: Disable debug mode outside local development.
-  - id: python-subprocess-shell-true
-    languages: [python]
-    severity: WARNING
-    message: A subprocess call enables shell parsing and requires manual review.
-    patterns:
-      - pattern: subprocess.$FUNC(..., shell=True, ...)
-      - metavariable-regex:
-          metavariable: $FUNC
-          regex: ^(run|call|check_call|check_output|Popen)$
-    metadata:
-      category: command-execution
-      confidence: HIGH
-      recommendation: Pass an argument list without shell=True whenever possible.
-  - id: python-unsafe-pickle-deserialization
-    languages: [python]
-    severity: ERROR
-    message: Pickle deserialization can execute code when input is untrusted.
-    pattern-either:
-      - pattern: pickle.load(...)
-      - pattern: pickle.loads(...)
-    metadata:
-      category: deserialization
-      confidence: HIGH
-      recommendation: Use a non-executable serialization format for untrusted data.
-  - id: python-obvious-hardcoded-secret
-    languages: [python]
-    severity: WARNING
-    message: An obvious secret-like variable is assigned a literal string.
-    patterns:
-      - pattern: $KEY = $VALUE
-      - metavariable-regex:
-          metavariable: $KEY
-          regex: (?i)^(api_key|secret_key|access_token|auth_token|password)$
-      - metavariable-regex:
-          metavariable: $VALUE
-          regex: ^["'][^"']{8,}["']$
-    metadata:
-      category: secrets
-      confidence: MEDIUM
-      recommendation: Load credentials from an approved secret store or runtime environment.
-  - id: python-tls-verification-disabled
-    languages: [python]
-    severity: WARNING
-    message: A requests call explicitly disables TLS certificate verification.
-    pattern: requests.$METHOD(..., verify=False, ...)
-    metadata:
-      category: transport-security
-      confidence: HIGH
-      recommendation: Keep certificate verification enabled and configure trusted certificates.
-  - id: javascript-tls-verification-disabled
-    languages: [javascript, typescript]
-    severity: WARNING
-    message: Enable TLS certificate verification.
-    pattern: "{..., rejectUnauthorized: false, ...}"
-    metadata:
-      category: configuration
-      confidence: HIGH
-      recommendation: Keep TLS certificate validation enabled.
-  - id: javascript-obvious-hardcoded-secret
-    languages: [javascript, typescript]
-    severity: WARNING
-    message: An obvious secret-like variable is assigned a literal string.
-    patterns:
-      - pattern-either:
-          - pattern: const $KEY = $VALUE
-          - pattern: let $KEY = $VALUE
-          - pattern: var $KEY = $VALUE
-      - metavariable-regex:
-          metavariable: $KEY
-          regex: (?i)^(apiKey|secretKey|accessToken|authToken|password)$
-      - metavariable-regex:
-          metavariable: $VALUE
-          regex: ^["'`][^"'`]{8,}["'`]$
-    metadata:
-      category: secrets
-      confidence: MEDIUM
-      recommendation: Load credentials from an approved secret store or runtime environment.
-  - id: javascript-child-process-exec
-    languages: [javascript, typescript]
-    severity: WARNING
-    message: A child_process command execution call requires manual input-safety review.
-    pattern-either:
-      - pattern: child_process.exec(...)
-      - pattern: child_process.execSync(...)
-    metadata:
-      category: command-execution
-      confidence: MEDIUM
-      recommendation: Prefer argument-based process APIs and validate all untrusted input.
-  - id: javascript-eval-usage
-    languages: [javascript, typescript]
-    severity: WARNING
-    message: Runtime evaluation of a string requires manual review.
-    pattern: eval(...)
-    metadata:
-      category: code-injection
-      confidence: HIGH
-      recommendation: Replace eval with explicit parsing or direct application logic.
-  - id: javascript-sql-query-concatenation
-    languages: [javascript, typescript]
-    severity: WARNING
-    message: SQL query is built with string concatenation and requires manual review.
-    pattern: $DB.query($LEFT + $RIGHT, ...)
-    metadata:
-      category: sql-injection
-      confidence: MEDIUM
-      recommendation: Use parameterized queries or prepared statements instead of concatenating values into SQL.
-  - id: php-local-file-inclusion
-    languages: [php]
-    severity: WARNING
-    message: User-controlled input reaches a PHP include or require statement.
-    mode: taint
-    options:
-      taint_assume_safe_indexes: true
-    pattern-sources:
-      - pattern-either:
-          - pattern: $_GET[...]
-          - pattern: $_POST[...]
-          - pattern: $_REQUEST[...]
-          - pattern: $_COOKIE[...]
-          - pattern: filter_input(INPUT_GET, ...)
-          - pattern: filter_input(INPUT_POST, ...)
-          - pattern: filter_input(INPUT_COOKIE, ...)
-        exact: true
-    pattern-sinks:
-      - pattern-either:
-          - pattern: include($PATH);
-          - pattern: include_once($PATH);
-          - pattern: require($PATH);
-          - pattern: require_once($PATH);
-    metadata:
-      category: local-file-inclusion
-      confidence: HIGH
-      recommendation: Do not build include paths from user input. Use a fixed allowlist of known local files.
-  - id: php-remote-file-inclusion
-    languages: [php]
-    severity: WARNING
-    message: An HTTP(S) address reaches a PHP include or require expression. Review remote code trust and allow_url_include settings.
-    mode: taint
-    options:
-      taint_assume_safe_indexes: true
-    pattern-sources:
-      - patterns:
-          - pattern: '"$URL"'
-          - metavariable-regex:
-              metavariable: $URL
-              regex: (?i)^https?://
-        exact: true
-    pattern-sinks:
-      - pattern-either:
-          - pattern: include($PATH);
-          - pattern: include_once($PATH);
-          - pattern: require($PATH);
-          - pattern: require_once($PATH);
-    pattern-sanitizers:
-      - pattern: basename(...)
-        exact: true
-      - pattern: parse_url($URL, PHP_URL_PATH)
-        exact: true
-      - patterns:
-          - pattern: '"$PREFIX" . $REST'
-          - metavariable-regex:
-              metavariable: $PREFIX
-              regex: ^(?:/|\./|\.\./|[A-Za-z0-9_-]+/)
-        exact: true
-    metadata:
-      category: remote-file-inclusion
-      confidence: HIGH
-      recommendation: Store executable PHP code locally and select modules from a fixed allowlist.
-  - id: javascript-sql-tainted-query
-    languages: [javascript, typescript]
-    severity: WARNING
-    message: Express request data reaches SQL query text. Prefer bound parameters.
-    mode: taint
-    pattern-sources:
-      - pattern-either:
-          - pattern: $REQ.query.$KEY
-          - pattern: $REQ.query[$KEY]
-          - pattern: $REQ.params.$KEY
-          - pattern: $REQ.params[$KEY]
-          - pattern: $REQ.body.$KEY
-          - pattern: $REQ.body[$KEY]
-          - pattern: $REQ.headers.$KEY
-          - pattern: $REQ.headers[$KEY]
-    pattern-sinks:
-      - patterns:
-          - pattern-either:
-              - pattern: $DB.query($SQL, ...)
-              - pattern: $DB.execute($SQL, ...)
-          - focus-metavariable: $SQL
-    metadata:
-      category: sql-injection
-      confidence: MEDIUM
-      recommendation: Pass request values using parameterized queries instead of including them in SQL text.
+- id: python-debug-enabled
+  languages:
+  - python
+  severity: WARNING
+  message: Debug mode should be disabled outside the local development environment.
+  pattern: $APP.run(..., debug=True, ...)
+  metadata:
+    category: configuration
+    confidence: HIGH
+    recommendation: Disable debug mode outside local development.
+- id: python-subprocess-shell-true
+  languages:
+  - python
+  severity: WARNING
+  message: A subprocess call enables shell parsing and requires manual review.
+  patterns:
+  - pattern: subprocess.$FUNC(..., shell=True, ...)
+  - metavariable-regex:
+      metavariable: $FUNC
+      regex: ^(run|call|check_call|check_output|Popen)$
+  metadata:
+    category: command-execution
+    confidence: HIGH
+    recommendation: Pass an argument list without shell=True whenever possible.
+- id: python-unsafe-pickle-deserialization
+  languages:
+  - python
+  severity: ERROR
+  message: Pickle deserialization can execute code when input is untrusted.
+  pattern-either:
+  - pattern: pickle.load(...)
+  - pattern: pickle.loads(...)
+  metadata:
+    category: deserialization
+    confidence: HIGH
+    recommendation: Use a non-executable serialization format for untrusted data.
+- id: python-obvious-hardcoded-secret
+  languages:
+  - python
+  severity: WARNING
+  message: An obvious secret-like variable is assigned a literal string.
+  patterns:
+  - pattern: $KEY = $VALUE
+  - metavariable-regex:
+      metavariable: $KEY
+      regex: (?i)^(api_key|secret_key|access_token|auth_token|password)$
+  - metavariable-regex:
+      metavariable: $VALUE
+      regex: ^["'][^"']{8,}["']$
+  metadata:
+    category: secrets
+    confidence: MEDIUM
+    recommendation: Load credentials from an approved secret store or runtime environment.
+- id: python-tls-verification-disabled
+  languages:
+  - python
+  severity: WARNING
+  message: A requests call explicitly disables TLS certificate verification.
+  pattern: requests.$METHOD(..., verify=False, ...)
+  metadata:
+    category: transport-security
+    confidence: HIGH
+    recommendation: Keep certificate verification enabled and configure trusted certificates.
+- id: javascript-tls-verification-disabled
+  languages:
+  - javascript
+  - typescript
+  severity: WARNING
+  message: Enable TLS certificate verification.
+  pattern: '{..., rejectUnauthorized: false, ...}'
+  metadata:
+    category: configuration
+    confidence: HIGH
+    recommendation: Keep TLS certificate validation enabled.
+- id: javascript-obvious-hardcoded-secret
+  languages:
+  - javascript
+  - typescript
+  severity: WARNING
+  message: An obvious secret-like variable is assigned a literal string.
+  patterns:
+  - pattern-either:
+    - pattern: const $KEY = $VALUE
+    - pattern: let $KEY = $VALUE
+    - pattern: var $KEY = $VALUE
+  - metavariable-regex:
+      metavariable: $KEY
+      regex: (?i)^(apiKey|secretKey|accessToken|authToken|password)$
+  - metavariable-regex:
+      metavariable: $VALUE
+      regex: ^["'`][^"'`]{8,}["'`]$
+  metadata:
+    category: secrets
+    confidence: MEDIUM
+    recommendation: Load credentials from an approved secret store or runtime environment.
+- id: javascript-child-process-exec
+  languages:
+  - javascript
+  - typescript
+  severity: WARNING
+  message: A child_process command execution call requires manual input-safety review.
+  pattern-either:
+  - pattern: child_process.exec(...)
+  - pattern: child_process.execSync(...)
+  metadata:
+    category: command-execution
+    confidence: MEDIUM
+    recommendation: Prefer argument-based process APIs and validate all untrusted
+      input.
+- id: javascript-eval-usage
+  languages:
+  - javascript
+  - typescript
+  severity: WARNING
+  message: Runtime evaluation of a string requires manual review.
+  pattern: eval(...)
+  metadata:
+    category: code-injection
+    confidence: HIGH
+    recommendation: Replace eval with explicit parsing or direct application logic.
+- id: javascript-sql-query-concatenation
+  languages:
+  - javascript
+  - typescript
+  severity: WARNING
+  message: SQL query is built with string concatenation and requires manual review.
+  pattern: $DB.query($LEFT + $RIGHT, ...)
+  metadata:
+    category: sql-injection
+    confidence: MEDIUM
+    recommendation: Use parameterized queries or prepared statements instead of concatenating
+      values into SQL.
+- id: php-local-file-inclusion
+  languages:
+  - php
+  severity: WARNING
+  message: User-controlled input reaches a PHP include or require statement.
+  mode: taint
+  options:
+    taint_assume_safe_indexes: true
+  pattern-sources:
+  - pattern-either:
+    - pattern: $_GET[...]
+    - pattern: $_POST[...]
+    - pattern: $_REQUEST[...]
+    - pattern: $_COOKIE[...]
+    - pattern: filter_input(INPUT_GET, ...)
+    - pattern: filter_input(INPUT_POST, ...)
+    - pattern: filter_input(INPUT_COOKIE, ...)
+    exact: true
+  pattern-sinks:
+  - pattern-either:
+    - pattern: include($PATH);
+    - pattern: include_once($PATH);
+    - pattern: require($PATH);
+    - pattern: require_once($PATH);
+  metadata:
+    category: local-file-inclusion
+    confidence: HIGH
+    recommendation: Do not build include paths from user input. Use a fixed allowlist
+      of known local files.
+- id: php-remote-file-inclusion
+  languages:
+  - php
+  severity: WARNING
+  message: An HTTP(S) address reaches a PHP include or require expression. Review
+    remote code trust and allow_url_include settings.
+  mode: taint
+  options:
+    taint_assume_safe_indexes: true
+  pattern-sources:
+  - patterns:
+    - pattern: '"$URL"'
+    - metavariable-regex:
+        metavariable: $URL
+        regex: (?i)^https?://
+    exact: true
+  pattern-sinks:
+  - pattern-either:
+    - pattern: include($PATH);
+    - pattern: include_once($PATH);
+    - pattern: require($PATH);
+    - pattern: require_once($PATH);
+  pattern-sanitizers:
+  - pattern: basename(...)
+    exact: true
+  - pattern: parse_url($URL, PHP_URL_PATH)
+    exact: true
+  - patterns:
+    - pattern: '"$PREFIX" . $REST'
+    - metavariable-regex:
+        metavariable: $PREFIX
+        regex: ^(?:/|\./|\.\./|[A-Za-z0-9_-]+/)
+    exact: true
+  metadata:
+    category: remote-file-inclusion
+    confidence: HIGH
+    recommendation: Store executable PHP code locally and select modules from a fixed
+      allowlist.
+- id: javascript-sql-tainted-query
+  languages:
+  - javascript
+  - typescript
+  severity: WARNING
+  message: Express request data reaches SQL query text. Prefer bound parameters.
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: $REQ.query.$KEY
+    - pattern: $REQ.query[$KEY]
+    - pattern: $REQ.params.$KEY
+    - pattern: $REQ.params[$KEY]
+    - pattern: $REQ.body.$KEY
+    - pattern: $REQ.body[$KEY]
+    - pattern: $REQ.headers.$KEY
+    - pattern: $REQ.headers[$KEY]
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: $DB.query($SQL, ...)
+      - pattern: $DB.execute($SQL, ...)
+    - focus-metavariable: $SQL
+  metadata:
+    category: sql-injection
+    confidence: MEDIUM
+    recommendation: Pass request values using parameterized queries instead of including
+      them in SQL text.
+- id: python-sql-tainted-execute
+  languages:
+  - python
+  severity: WARNING
+  message: HTTP request data reaches SQL query text in execute/executemany.
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: $REQ.args[...]
+    - pattern: $REQ.args.get(...)
+    - pattern: $REQ.form[...]
+    - pattern: $REQ.form.get(...)
+    - pattern: $REQ.GET[...]
+    - pattern: $REQ.GET.get(...)
+    - pattern: $REQ.POST[...]
+    - pattern: $REQ.POST.get(...)
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: $CURSOR.execute($SQL, ...)
+      - pattern: $CURSOR.executemany($SQL, ...)
+    - focus-metavariable: $SQL
+  metadata:
+    category: sql-injection
+    confidence: MEDIUM
+    recommendation: Use DB-API placeholders with separate parameters for untrusted
+      values.
+- id: php-sql-tainted-query
+  languages:
+  - php
+  severity: WARNING
+  message: PHP request data reaches raw SQL text in query/exec or mysqli_query.
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: $_GET[...]
+    - pattern: $_POST[...]
+    - pattern: $_REQUEST[...]
+    - pattern: $_COOKIE[...]
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: $DB->query($SQL, ...)
+      - pattern: $DB->exec($SQL)
+      - pattern: mysqli_query($CONNECTION, $SQL, ...)
+      - pattern: mysqli_real_query($CONNECTION, $SQL)
+      - pattern: $DB->real_query($SQL)
+      - pattern: mysqli_execute_query($CONNECTION, $SQL, ...)
+      - pattern: $DB->execute_query($SQL, ...)
+    - focus-metavariable: $SQL
+  metadata:
+    category: sql-injection
+    confidence: MEDIUM
+    recommendation: Use PDO prepared statements or parameterized mysqli queries.
+- id: javascript-knex-sqli-taint
+  languages:
+  - javascript
+  - typescript
+  severity: WARNING
+  message: HTTP input reaches raw Knex SQL. Use bound parameters.
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: $REQ.query.$KEY
+    - pattern: $REQ.query[$KEY]
+    - pattern: $REQ.params.$KEY
+    - pattern: $REQ.params[$KEY]
+    - pattern: $REQ.body.$KEY
+    - pattern: $REQ.body[$KEY]
+    - pattern: $REQ.headers.$KEY
+    - pattern: $REQ.headers[$KEY]
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: $KNEX.raw($SQL, ...)
+      - pattern: $QUERY.whereRaw($SQL, ...)
+      - pattern: $QUERY.orWhereRaw($SQL, ...)
+      - pattern: $QUERY.havingRaw($SQL, ...)
+    - focus-metavariable: $SQL
+  metadata:
+    category: sql-injection
+    confidence: MEDIUM
+    recommendation: Use Knex placeholders and separate bindings.
+- id: python-django-raw-sqli-taint
+  languages:
+  - python
+  severity: WARNING
+  message: Django request input reaches raw ORM SQL.
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: $REQ.GET[...]
+    - pattern: $REQ.GET.get(...)
+    - pattern: $REQ.POST[...]
+    - pattern: $REQ.POST.get(...)
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: $MODEL.objects.raw($SQL, ...)
+      - pattern: $MODEL._default_manager.raw($SQL, ...)
+    - focus-metavariable: $SQL
+  metadata:
+    category: sql-injection
+    confidence: MEDIUM
+    recommendation: Use Django ORM or parameterized raw queries.
+- id: php-prepare-sqli-taint
+  languages:
+  - php
+  severity: WARNING
+  message: User input is inserted into SQL before prepare().
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: $_GET[...]
+    - pattern: $_POST[...]
+    - pattern: $_REQUEST[...]
+    - pattern: $_COOKIE[...]
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: $DB->prepare($SQL, ...)
+      - pattern: mysqli_prepare($CONN, $SQL)
+    - focus-metavariable: $SQL
+  metadata:
+    category: sql-injection
+    confidence: MEDIUM
+    recommendation: Prepare constant SQL with placeholders and bind values.
+- id: python-untrusted-system-prompt
+  mode: taint
+  languages:
+  - python
+  severity: WARNING
+  message: HTTP input reaches a privileged LLM message; review prompt injection risk.
+  pattern-sources:
+  - pattern-either:
+    - pattern: request.args.get(...)
+    - pattern: request.form.get(...)
+    - pattern: request.json.get(...)
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: '{"role": "system", "content": $CONTENT}'
+      - pattern: '{"role": "developer", "content": $CONTENT}'
+    - focus-metavariable: $CONTENT
+  metadata:
+    category: prompt-injection
+    confidence: MEDIUM
+    recommendation: Keep privileged instructions constant; pass untrusted input as
+      user data and validate outputs.
+- id: javascript-nosqli-tainted-where
+  languages:
+  - javascript
+  - typescript
+  severity: WARNING
+  message: User-controlled input reaches a NoSQL $where expression; review query construction.
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: $REQ.params.$FIELD
+    - pattern: $REQ.query.$FIELD
+    - pattern: $REQ.body.$FIELD
+    - pattern: $REQ.params[$FIELD]
+    - pattern: $REQ.query[$FIELD]
+    - pattern: $REQ.body[$FIELD]
+    exact: true
+  pattern-sanitizers:
+  - pattern: Number(...)
+    exact: true
+  - pattern: parseInt(...)
+    exact: true
+  - pattern: parseFloat(...)
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: '$COLLECTION.$METHOD({..., $where: $QUERY, ...}, ...)
 
-  - id: python-sql-tainted-execute
-    languages: [python]
-    severity: WARNING
-    message: HTTP request data reaches SQL query text in execute/executemany.
-    mode: taint
-    pattern-sources:
-      - pattern-either:
-          - pattern: $REQ.args[...]
-          - pattern: $REQ.args.get(...)
-          - pattern: $REQ.form[...]
-          - pattern: $REQ.form.get(...)
-          - pattern: $REQ.GET[...]
-          - pattern: $REQ.GET.get(...)
-          - pattern: $REQ.POST[...]
-          - pattern: $REQ.POST.get(...)
-    pattern-sinks:
-      - patterns:
-          - pattern-either:
-              - pattern: $CURSOR.execute($SQL, ...)
-              - pattern: $CURSOR.executemany($SQL, ...)
-          - focus-metavariable: $SQL
-    metadata:
-      category: sql-injection
-      confidence: MEDIUM
-      recommendation: Use DB-API placeholders with separate parameters for untrusted values.
+        '
+    - metavariable-regex:
+        metavariable: $METHOD
+        regex: ^(find|findOne|countDocuments)$
+    - focus-metavariable: $QUERY
+  metadata:
+    category: nosql-injection
+    confidence: MEDIUM
+    cwe: 'CWE-943: Improper Neutralization of Special Elements in Data Query Logic'
+    recommendation: Avoid $where. Prefer field-based filters; convert numeric inputs
+      before constructing expressions. String conversion alone is not safe for $where
+      code.
+- id: javascript-nosqli-scalar-operator
+  languages:
+  - javascript
+  - typescript
+  severity: WARNING
+  message: Untrusted input reaches a MongoDB filter field without scalar conversion;
+    review whether operator objects are accepted.
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: $REQ.body.$FIELD
+    - pattern: $REQ.query.$FIELD
+    - pattern: $REQ.params.$FIELD
+    - pattern: $REQ.body[$FIELD]
+    - pattern: $REQ.query[$FIELD]
+    - pattern: $REQ.params[$FIELD]
+    exact: true
+  pattern-sanitizers:
+  - pattern: String(...)
+    exact: true
+  - pattern: Number(...)
+    exact: true
+  - pattern: parseInt(...)
+    exact: true
+  - pattern: parseFloat(...)
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: '$COLLECTION.$METHOD({..., $KEY: $VALUE, ...}, ...)
 
-  - id: php-sql-tainted-query
-    languages: [php]
-    severity: WARNING
-    message: PHP request data reaches raw SQL text in query/exec or mysqli_query.
-    mode: taint
-    pattern-sources:
-      - pattern-either:
-          - pattern: $_GET[...]
-          - pattern: $_POST[...]
-          - pattern: $_REQUEST[...]
-          - pattern: $_COOKIE[...]
-    pattern-sinks:
-      - patterns:
-          - pattern-either:
-              - pattern: $DB->query($SQL, ...)
-              - pattern: $DB->exec($SQL)
-              - pattern: mysqli_query($CONNECTION, $SQL, ...)
-              - pattern: mysqli_real_query($CONNECTION, $SQL)
-              - pattern: $DB->real_query($SQL)
-              - pattern: mysqli_execute_query($CONNECTION, $SQL, ...)
-              - pattern: $DB->execute_query($SQL, ...)
-          - focus-metavariable: $SQL
-    metadata:
-      category: sql-injection
-      confidence: MEDIUM
-      recommendation: Use PDO prepared statements or parameterized mysqli queries.
-  - id: javascript-knex-sqli-taint
-    languages: [javascript, typescript]
-    severity: WARNING
-    message: HTTP input reaches raw Knex SQL. Use bound parameters.
-    mode: taint
-    pattern-sources:
-      - pattern-either:
-          - pattern: $REQ.query.$KEY
-          - pattern: $REQ.query[$KEY]
-          - pattern: $REQ.params.$KEY
-          - pattern: $REQ.params[$KEY]
-          - pattern: $REQ.body.$KEY
-          - pattern: $REQ.body[$KEY]
-          - pattern: $REQ.headers.$KEY
-          - pattern: $REQ.headers[$KEY]
-        exact: true
-    pattern-sinks:
-      - patterns:
-          - pattern-either:
-              - pattern: $KNEX.raw($SQL, ...)
-              - pattern: $QUERY.whereRaw($SQL, ...)
-              - pattern: $QUERY.orWhereRaw($SQL, ...)
-              - pattern: $QUERY.havingRaw($SQL, ...)
-          - focus-metavariable: $SQL
-    metadata:
-      category: sql-injection
-      confidence: MEDIUM
-      recommendation: Use Knex placeholders and separate bindings.
+        '
+    - metavariable-regex:
+        metavariable: $METHOD
+        regex: ^(find|findOne|countDocuments)$
+    - metavariable-regex:
+        metavariable: $KEY
+        regex: ^[a-zA-Z_][a-zA-Z0-9_]*$
+    - focus-metavariable: $VALUE
+  - patterns:
+    - pattern: '$COLLECTION.distinct($NAME, {..., $KEY: $VALUE, ...}, ...)
 
-  - id: python-django-raw-sqli-taint
-    languages: [python]
-    severity: WARNING
-    message: Django request input reaches raw ORM SQL.
-    mode: taint
-    pattern-sources:
-      - pattern-either:
-          - pattern: $REQ.GET[...]
-          - pattern: $REQ.GET.get(...)
-          - pattern: $REQ.POST[...]
-          - pattern: $REQ.POST.get(...)
-        exact: true
-    pattern-sinks:
-      - patterns:
-          - pattern-either:
-              - pattern: $MODEL.objects.raw($SQL, ...)
-              - pattern: $MODEL._default_manager.raw($SQL, ...)
-          - focus-metavariable: $SQL
-    metadata:
-      category: sql-injection
-      confidence: MEDIUM
-      recommendation: Use Django ORM or parameterized raw queries.
+        '
+    - metavariable-regex:
+        metavariable: $KEY
+        regex: ^[a-zA-Z_][a-zA-Z0-9_]*$
+    - focus-metavariable: $VALUE
+  - patterns:
+    - pattern: 'const $FILTER = {..., $KEY: $VALUE, ...};
 
-  - id: php-prepare-sqli-taint
-    languages: [php]
-    severity: WARNING
-    message: User input is inserted into SQL before prepare().
-    mode: taint
-    pattern-sources:
-      - pattern-either:
-          - pattern: $_GET[...]
-          - pattern: $_POST[...]
-          - pattern: $_REQUEST[...]
-          - pattern: $_COOKIE[...]
-        exact: true
-    pattern-sinks:
-      - patterns:
-          - pattern-either:
-              - pattern: $DB->prepare($SQL, ...)
-              - pattern: mysqli_prepare($CONN, $SQL)
-          - focus-metavariable: $SQL
-    metadata:
-      category: sql-injection
-      confidence: MEDIUM
-      recommendation: Prepare constant SQL with placeholders and bind values.
-  - id: python-untrusted-system-prompt
-    mode: taint
-    languages: [python]
-    severity: WARNING
-    message: HTTP input reaches a privileged LLM message; review prompt injection risk.
-    pattern-sources:
-      - pattern-either:
-          - pattern: request.args.get(...)
-          - pattern: request.form.get(...)
-          - pattern: request.json.get(...)
-        exact: true
-    pattern-sinks:
-      - patterns:
-          - pattern-either:
-              - pattern: '{"role": "system", "content": $CONTENT}'
-              - pattern: '{"role": "developer", "content": $CONTENT}'
-          - focus-metavariable: $CONTENT
-    metadata:
-      category: prompt-injection
-      confidence: MEDIUM
-      recommendation: Keep privileged instructions constant; pass untrusted input as user data and validate outputs.
-  - id: javascript-nosqli-tainted-where
-    languages: [javascript, typescript]
-    severity: WARNING
-    message: User-controlled input reaches a NoSQL $where expression.
-    mode: taint
-    pattern-sources:
-      - pattern-either:
-          - pattern: $REQ.params.$FIELD
-          - pattern: $REQ.query.$FIELD
-          - pattern: $REQ.body.$FIELD
-    pattern-sinks:
-      - patterns:
-          - pattern-either:
-              - pattern: |
-                  $COLLECTION.find({..., $where: $QUERY, ...}, ...)
-              - pattern: |
-                  $COLLECTION.findOne({..., $where: $QUERY, ...}, ...)
-          - focus-metavariable: $QUERY
-    metadata:
-      category: nosql-injection
-      confidence: MEDIUM
-      recommendation: Validate input types and use field-based filters instead of $where expressions.
-  - id: javascript-nosqli-scalar-operator
-    languages: [javascript, typescript]
-    severity: WARNING
-    message: Untrusted input reaches a MongoDB scalar filter without type conversion.
-    mode: taint
-    pattern-sources:
-      - pattern-either:
-          - pattern: $REQ.body.$FIELD
-          - pattern: $REQ.query.$FIELD
-          - pattern: $REQ.params.$FIELD
-    pattern-sanitizers:
-      - pattern: String(...)
-      - pattern: Number(...)
-    pattern-sinks:
-      - patterns:
-          - pattern-either:
-              - pattern: |
-                  $COLLECTION.find({..., $KEY: $VALUE, ...}, ...)
-              - pattern: |
-                  $COLLECTION.findOne({..., $KEY: $VALUE, ...}, ...)
-          - metavariable-regex:
-              metavariable: $KEY
-              regex: '^[a-zA-Z_][a-zA-Z0-9_]*$'
-          - focus-metavariable: $VALUE
-    metadata:
-      category: nosql-injection
-      confidence: MEDIUM
-      recommendation: Enforce scalar types and reject MongoDB operator objects.
-  - id: javascript-nosqli-untrusted-filter
-    languages: [javascript, typescript]
-    severity: WARNING
-    message: A user-supplied filter reaches a MongoDB query.
-    mode: taint
-    pattern-sources:
-      - pattern-either:
-          - pattern: $REQ.body.filter
-          - pattern: $REQ.query.filter
-    pattern-sanitizers:
-      - pattern: String(...)
-      - pattern: Number(...)
-    pattern-sinks:
-      - patterns:
-          - pattern-either:
-              - pattern: $COLLECTION.find($FILTER, ...)
-              - pattern: $COLLECTION.findOne($FILTER, ...)
-          - focus-metavariable: $FILTER
-    metadata:
-      category: nosql-injection
-      confidence: MEDIUM
-      recommendation: Allowlist fields and operators and preserve server-owned authorization scope.
-  - id: python-ssrf-user-controlled-request
-    languages: [python]
-    severity: WARNING
-    message: HTTP input reaches a server-side HTTP request.
-    mode: taint
-    pattern-sources:
-      - pattern-either:
-          - pattern: request.args.get(...)
-          - pattern: request.form.get(...)
-          - pattern: request.json.get(...)
-    pattern-sinks:
-      - patterns:
-          - pattern-either:
-              - pattern: requests.get($URL, ...)
-              - pattern: requests.post($URL, ...)
-              - pattern: urllib.request.urlopen($URL, ...)
-          - focus-metavariable: $URL
-    metadata:
-      category: ssrf
-      confidence: HIGH
-      recommendation: Map user choices to an allowlist of fixed local destinations; never request an arbitrary URL.
-  - id: python-arp-spoofing-pattern
-    languages: [python]
-    severity: WARNING
-    message: Code constructs an unsolicited ARP reply and may implement ARP spoofing.
-    patterns:
-      - pattern: ARP(..., op=2, ...)
-      - pattern-inside: |
-          def $FUNC(...):
-            ...
-    metadata:
-      category: spoofing
-      confidence: MEDIUM
-      recommendation: Remove active packet-forging code; use isolated simulations for training and monitoring.
-  - id: python-dns-spoofing-pattern
-    languages: [python]
-    severity: WARNING
-    message: Code constructs a forged DNS answer and may implement DNS spoofing.
-    pattern: DNSRR(..., rdata=$VALUE, ...)
-    metadata:
-      category: spoofing
-      confidence: MEDIUM
-      recommendation: Do not forge DNS replies; use authenticated DNS controls and isolated fixtures.
+        ...
+
+        return $COLLECTION.$METHOD($FILTER, ...);
+
+        '
+    - metavariable-regex:
+        metavariable: $METHOD
+        regex: ^(find|findOne|countDocuments)$
+    - metavariable-regex:
+        metavariable: $KEY
+        regex: ^[a-zA-Z_][a-zA-Z0-9_]*$
+    - focus-metavariable: $VALUE
+  metadata:
+    category: nosql-injection
+    confidence: MEDIUM
+    cwe: 'CWE-943: Improper Neutralization of Special Elements in Data Query Logic'
+    recommendation: Enforce scalar types and construct fresh filters. TypeScript type
+      assertions do not validate runtime input.
+- id: javascript-nosqli-untrusted-filter
+  languages:
+  - javascript
+  - typescript
+  severity: WARNING
+  message: A user-supplied filter reaches a MongoDB query; review allowed operators
+    and server-owned scope.
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-either:
+      - pattern: $REQ.body.$FIELD
+      - pattern: $REQ.query.$FIELD
+      - pattern: $REQ.body[$FIELD]
+      - pattern: $REQ.query[$FIELD]
+    - metavariable-regex:
+        metavariable: $FIELD
+        regex: ^["']?(filter|criteria|selector)["']?$
+    exact: true
+  pattern-sanitizers:
+  - pattern: String(...)
+    exact: true
+  - pattern: Number(...)
+    exact: true
+  - pattern: parseInt(...)
+    exact: true
+  - pattern: parseFloat(...)
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: $COLLECTION.$METHOD($FILTER, ...)
+    - metavariable-regex:
+        metavariable: $METHOD
+        regex: ^(find|findOne|countDocuments)$
+    - focus-metavariable: $FILTER
+  - patterns:
+    - pattern: $COLLECTION.distinct($NAME, $FILTER, ...)
+    - focus-metavariable: $FILTER
+  metadata:
+    category: nosql-injection
+    confidence: MEDIUM
+    cwe: 'CWE-943: Improper Neutralization of Special Elements in Data Query Logic'
+    recommendation: Allowlist fields and construct fresh filters. JSON.parse, object
+      spread and Object.assign do not validate query operators.
+- id: python-ssrf-user-controlled-request
+  languages:
+  - python
+  severity: WARNING
+  message: HTTP input reaches a server-side HTTP request.
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: request.args.get(...)
+    - pattern: request.form.get(...)
+    - pattern: request.json.get(...)
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: requests.get($URL, ...)
+      - pattern: requests.post($URL, ...)
+      - pattern: urllib.request.urlopen($URL, ...)
+    - focus-metavariable: $URL
+  metadata:
+    category: ssrf
+    confidence: HIGH
+    recommendation: Map user choices to an allowlist of fixed local destinations;
+      never request an arbitrary URL.
+- id: python-arp-spoofing-pattern
+  languages:
+  - python
+  severity: WARNING
+  message: Code constructs an unsolicited ARP reply and may implement ARP spoofing.
+  patterns:
+  - pattern: ARP(..., op=2, ...)
+  - pattern-inside: "def $FUNC(...):\n  ...\n"
+  metadata:
+    category: spoofing
+    confidence: MEDIUM
+    recommendation: Remove active packet-forging code; use isolated simulations for
+      training and monitoring.
+- id: python-dns-spoofing-pattern
+  languages:
+  - python
+  severity: WARNING
+  message: Code constructs a forged DNS answer and may implement DNS spoofing.
+  pattern: DNSRR(..., rdata=$VALUE, ...)
+  metadata:
+    category: spoofing
+    confidence: MEDIUM
+    recommendation: Do not forge DNS replies; use authenticated DNS controls and isolated
+      fixtures.
+- id: javascript-nosqli-untrusted-pipeline
+  languages:
+  - javascript
+  - typescript
+  severity: WARNING
+  message: Untrusted request data reaches a MongoDB aggregation pipeline; review allowed
+    stages, operators and scope.
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-either:
+      - pattern: $REQ.body.$FIELD
+      - pattern: $REQ.query.$FIELD
+      - pattern: $REQ.body[$FIELD]
+      - pattern: $REQ.query[$FIELD]
+    - metavariable-regex:
+        metavariable: $FIELD
+        regex: ^["']?(pipeline|filter|criteria|selector)["']?$
+    exact: true
+  pattern-sanitizers:
+  - pattern: String(...)
+    exact: true
+  - pattern: Number(...)
+    exact: true
+  pattern-sinks:
+  - patterns:
+    - pattern: $COLLECTION.aggregate($PIPELINE, ...)
+    - focus-metavariable: $PIPELINE
+  metadata:
+    category: nosql-injection
+    confidence: MEDIUM
+    cwe: 'CWE-943: Improper Neutralization of Special Elements in Data Query Logic'
+    recommendation: Build aggregation stages server-side from validated scalar fields.
+      Do not accept arbitrary pipelines or $match filters from requests.

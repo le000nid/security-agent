@@ -24,6 +24,11 @@ EXPECTED = {
     "ssrf-lab",
     "spoofing-sast",
     "security-key-lab",
+    "nosqli-profile-catalog",
+    "nosqli-profile-catalog-safe",
+    "nosqli-profile-inventory",
+    "nosqli-profile-inventory-safe",
+    "nosqli-sast-matrix",
 }
 
 
@@ -144,3 +149,25 @@ def test_new_baselines_are_present(benchmark_id):
         )
     )
     assert baseline and benchmark.ui_metadata()["baseline_count"] == len(baseline)
+
+
+def test_registered_labs_do_not_share_host_ports():
+    compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
+    published = {}
+    for name, service in compose["services"].items():
+        for value in service.get("ports", []):
+            host, port, _ = value.split(":")
+            endpoint = (host, port)
+            assert endpoint not in published, (name, published.get(endpoint), endpoint)
+            published[endpoint] = name
+    assert published[("127.0.0.1", "3006")] == "ssrf-lab"
+    assert published[("127.0.0.1", "3008")] == "nosqli-portable-api"
+
+
+def test_nosqli_overlay_contains_only_test_service():
+    overlay = yaml.safe_load((ROOT / "docker-compose.nosqli.yml").read_text())
+    assert set(overlay["services"]) == {"nosqli-mongo-tests"}
+    assert (
+        overlay["services"]["nosqli-mongo-tests"]["image"]
+        == "ai-security-nosqli-lab:0.4.1"
+    )

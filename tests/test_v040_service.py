@@ -51,26 +51,31 @@ def service(tmp_path, monkeypatch):
 
 def test_builtin_registry():
     registry = BenchmarkRegistry.load()
-    expected = {
+    assert {b.id for b in registry.list()} == {
         "sample-sast",
         "juice-shop",
         "demo-full",
-        "sast-contours",
-        "dan-lab",
         "nosqli-sast",
         "nosqli-dast",
         "nosqli-mongo-full",
+        "nosqli-profile-catalog",
+        "nosqli-profile-catalog-safe",
+        "nosqli-profile-inventory",
+        "nosqli-profile-inventory-safe",
+        "nosqli-sast-matrix",
+        "sast-contours",
+        "dan-lab",
         "ssrf-lab",
         "spoofing-sast",
         "security-key-lab",
     }
-    assert {b.id for b in registry.list()} == expected
     assert registry.trusted_hosts() == {
         "juice-shop",
         "demo-full",
-        "dan-lab",
         "nosqli-lab",
         "nosqli-mongo-api",
+        "nosqli-portable-api",
+        "dan-lab",
         "ssrf-lab",
         "security-key-lab",
     }
