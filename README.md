@@ -65,6 +65,7 @@ CLI / Web UI / Chat
 | `juice-shop` | DAST | локальный OWASP Juice Shop |
 | `demo-full` | FULL | один проект; стабильный baseline 4 SAST + 3 DAST |
 | `sast-contours` | SAST | SQL Injection, LFI, RFI и безопасные контрольные примеры |
+| `sast-secrets` | SAST | синтетические кандидаты в секреты и PEM-блоки с безопасными контролями |
 | `dan-lab` | FULL | учебная детерминированная симуляция prompt injection |
 | `nosqli-sast` | SAST | NoSQLi в JavaScript и безопасные контрольные примеры |
 | `nosqli-dast` | DAST | локальная проверка NoSQLi в Juice Shop |
@@ -156,6 +157,7 @@ docker compose --profile agent build agent
 ```powershell
 .\run.ps1 scan --benchmark demo-full --mode full --no-llm
 .\run.ps1 scan --benchmark sast-contours --mode sast --no-llm
+.\run.ps1 scan --benchmark sast-secrets --mode sast --no-llm
 .\run.ps1 scan --benchmark dan-lab --mode full --no-llm
 .\run.ps1 scan --benchmark nosqli-mongo-full --mode full --no-llm
 .\run.ps1 scan --benchmark ssrf-lab --mode full --no-llm

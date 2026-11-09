@@ -56,6 +56,18 @@
   - source-only
   - sast
   - curated
+- id: sast-secrets
+  name: Поиск кандидатов в секреты
+  description: Статический поиск синтетических литералов в коде, текстах и конфигурациях, а также PEM-блоков.
+  description_ru: Кандидаты в секреты с безопасными контрольными примерами. Не подтверждает реальный секрет и не вызывает модель.
+  capabilities:
+  - sast
+  source_path: /targets/sast-secrets
+  expected_findings: sast-secrets.json
+  tags:
+  - educational
+  - source-only
+  - synthetic-secret
 - id: dan-lab
   name: DAN — учебная симуляция
   description: Детерминированная симуляция prompt injection без настоящей LLM и без

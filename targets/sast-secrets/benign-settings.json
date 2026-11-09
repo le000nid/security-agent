@@ -1,0 +1,5 @@
+{
+  "api_key": "replace_me",
+  "client-secret": "${TRAINING_CLIENT_SECRET}",
+  "description": "ordinary configuration"
+}

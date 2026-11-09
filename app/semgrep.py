@@ -47,6 +47,7 @@ def run_semgrep(source: Path, output: Path) -> None:
                     "--json",
                     "--metrics=off",
                     "--disable-version-check",
+                    "--disable-nosem",
                     "--strict",
                     str(source),
                 ],

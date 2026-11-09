@@ -43,6 +43,21 @@ jobs:
           load: true
           tags: ai-security-agent:0.4.1
           cache-from: type=gha
+      - name: SAST regression acceptance
+        timeout-minutes: 10
+        run: |
+          mkdir -p runs logs reports
+          export AGENT_UID=$(id -u) AGENT_GID=$(id -g)
+          docker compose --profile agent run --rm --no-deps --entrypoint python agent \
+            -m benchmark.verify_sast_regressions --output-dir /agent/logs/sast-regression
+      - name: Upload SAST regression reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sast-regression-reports
+          path: logs/sast-regression/
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Scanner-only lab smoke
         run: |
           mkdir -p runs logs reports

@@ -64,6 +64,7 @@ def test_builtin_registry():
         "nosqli-profile-inventory-safe",
         "nosqli-sast-matrix",
         "sast-contours",
+        "sast-secrets",
         "dan-lab",
         "ssrf-lab",
         "spoofing-sast",

@@ -17,6 +17,7 @@ EXPECTED = {
     "juice-shop",
     "demo-full",
     "sast-contours",
+    "sast-secrets",
     "dan-lab",
     "nosqli-sast",
     "nosqli-dast",
