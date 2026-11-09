@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import httpx
 import pytest
 from test_brief_and_enrichment import BRIEF, encoded
-from test_chat_recovery import PARTIAL, STRUCTURED, analyst
+from test_chat_recovery import COMPLETE, PARTIAL, analyst
 from test_stabilization import ENRICHMENT, chat
 from test_stabilization import rig as rig
 from test_v040_service import service as service
@@ -22,7 +22,7 @@ from app.service import RunRequest
 
 BAD = {
     **BRIEF,
-    "overall_summary": "PRIVATE-MODEL-TEXT" * 50,
+    "overall_summary": "PRIVATE-MODEL-TEXT" * 500,
     "PRIVATE-UNKNOWN-KEY": "PRIVATE-VALUE",
 }
 WIDE = "Какие утверждения об этих находках точно подтверждены сканерами, а какие являются предположениями и требуют ручной проверки?"
@@ -47,7 +47,9 @@ def test_brief_bounded_paths_and_usage(rig, prefix, kinds):
     http.request.side_effect = [*prefix, encoded(BRIEF)]
     assert generate_ai_brief(state, client, Settings()).headline == BRIEF["headline"]
     assert [a.kind for a in state.brief_attempts] == kinds
-    assert [a.max_tokens for a in state.brief_attempts] == [2000] + [3200] * len(prefix)
+    assert [a.max_tokens for a in state.brief_attempts] == [6000] + [10000] * len(
+        prefix
+    )
     assert client.brief_usage.requests == http.request.call_count == len(kinds)
     assert client.brief_usage.completion_tokens == len(kinds) * 5
     requests = [call.kwargs["json"] for call in http.request.call_args_list]
@@ -157,16 +159,13 @@ def test_parser_failure_reaches_analyst_not_error_placeholder(web, service, erro
     # Old path stopped at the first exception and never invoked the analyst.
     from app.llm_output import ChatResponseTruncated
 
-    llm.client.complete_json.side_effect = [
-        LLMError("chat", error),
-        ChatResponseTruncated(PARTIAL),
-        ChatResponseTruncated(PARTIAL),
-    ]
+    llm.client.complete_json.side_effect = LLMError("chat", error)
+    llm.client.complete_text.side_effect = ChatResponseTruncated(PARTIAL)
     app.state.jobs.start = Mock(side_effect=AssertionError("Must not scan"))
     response = client.post("/api/chat", json={"run_id": run.run_id, "message": WIDE})
     assert response.status_code == 200
     result = response.json()["analysis"]
-    assert result["truncated"] and result["summary"] == "Полезная первая часть"
+    assert result["truncated"] and result["answer"] == PARTIAL
     assert set(result["follow_up_actions"]) == {
         "continue",
         "shorten",
@@ -174,8 +173,8 @@ def test_parser_failure_reaches_analyst_not_error_placeholder(web, service, erro
         "confirmed",
         "manual",
     }
-    assert [c.kwargs["role"] for c in llm.client.complete_json.call_args_list] == [
-        "chat",
+    assert llm.client.complete_json.call_args.kwargs["role"] == "chat"
+    assert [c.kwargs["role"] for c in llm.client.complete_text.call_args_list] == [
         "chat_analysis",
         "chat_analysis",
     ]
@@ -190,7 +189,7 @@ def test_full_http_envelope_parser_truncation_then_answer(web, service, rig):
     llm.client, llm.connectivity = real, "available"
     http.request.side_effect = [
         chat('{"intent":"ANALY', "length"),
-        chat(json.dumps(STRUCTURED)),
+        chat(COMPLETE),
     ]
     response = client.post("/api/chat", json={"run_id": run.run_id, "message": WIDE})
     assert response.status_code == 200 and not response.json()["analysis"]["truncated"]
@@ -208,9 +207,9 @@ def test_full_http_envelope_parser_truncation_then_answer(web, service, rig):
 )
 def test_actual_reported_claims_are_corrected(rig, bad):
     llm, http, summary, findings = analyst(rig)
-    http.request.return_value = chat(json.dumps({**STRUCTURED, "summary": bad}))
+    http.request.return_value = chat(bad)
     result = analyze(llm, summary, findings, WIDE, "ANALYZE_RUN")
-    assert result["summary"] != bad
+    assert result["answer"] != bad
     assert result["enrichment_status"] == "completed"
     assert result["exploit_validation_performed"] is False
     assert result["finding_facts"][0]["severity"] == "high"

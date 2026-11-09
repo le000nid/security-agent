@@ -51,7 +51,7 @@ docker compose --profile agent run --rm --no-deps --entrypoint nuclei agent -val
 | Chat показывает `unchecked` | нажмите «Проверить подключение» или выполните `doctor --check-llm` |
 | HTTP 401/403 | проверьте локальный API key и разрешения модели; не печатайте key |
 | Model unavailable | укажите точный model ID из разрешённого provider |
-| `brief_response_truncated` | Brief уже делает один concise retry; смотрите safe attempts в summary |
+| `brief_response_truncated` | Brief делает один содержательный retry с увеличенным бюджетом; смотрите safe attempts в summary |
 | `brief_schema_validation_error` | выполняется один terminal schema repair; смотрите `{field,type}` |
 | `chat_response_truncated` | полезная часть остаётся в UI с follow-up actions |
 | Provider outage | используйте `--no-llm`; scanner и отчёты работают независимо |

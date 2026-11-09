@@ -51,6 +51,9 @@ async function main() {
   assert.equal(sent.at(-1).payload.action.intent, 'EXPLAIN_FINDING');
   const complete = context.chatReply({analysis:{...answer, truncated:false}});
   assert(!flatten(complete).some(n => n.textContent === 'Продолжить'));
+  const longText = 'Абзац с подробным анализом.\n\n'.repeat(200);
+  const modern = context.chatReply({analysis:{answer:longText, truncated:false}});
+  assert(flatten(modern).some(n => n.textContent === longText && n.className === 'answer'));
   // Exercise sendChat with different currently-selected finding: explicit context wins.
   const requests = [];
   context.$ = id => ({value:id === 'chat-run' ? 'original-run' : 'other-finding', querySelector:() => ({})});

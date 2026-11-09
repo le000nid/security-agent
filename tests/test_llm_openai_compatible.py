@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from app import main
+from app.config import Settings
 from app.llm import SYSTEM_PROMPT, Enrichment, OpenAICompatibleClient, enrich_findings
 from app.models import Finding
 
@@ -41,6 +42,8 @@ def response(status=200, payload=None, *, content=None):
 
 @pytest.fixture
 def configured(monkeypatch):
+    for field in Settings.model_fields:
+        monkeypatch.delenv(field.upper(), raising=False)
     values = {
         "LLM_PROVIDER": "openai_compatible",
         "LLM_BASE_URL": BASE_URL,
@@ -116,7 +119,10 @@ def test_model_discovery_url_bearer_exact_match_and_cache(monkeypatch, configure
     assert client.chat_url == f"{BASE_URL}/chat/completions"
     assert client.available_model_ids == (MODEL, "other")
     assert client.model_available is True
-    assert "runtime-secret" not in json.dumps(client.public_metadata())
+    metadata = client.public_metadata()
+    assert metadata["configured_model"] == MODEL
+    assert metadata["model"] == MODEL
+    assert "runtime-secret" not in json.dumps(metadata)
     assert len(stub.calls) == 1
     method, url, kwargs = stub.calls[0]
     assert (method, url) == ("GET", f"{BASE_URL}/models")
@@ -131,6 +137,75 @@ def test_model_missing_lists_available_and_never_calls_chat(monkeypatch, configu
         client.ensure_model_available()
     assert len(stub.calls) == 1
     assert client.model_available is False
+
+
+@pytest.mark.parametrize(
+    ("policy", "expected"),
+    [
+        ("fast", "qwen3.8-flash-next"),
+        ("quality", "Qwen3.8-27B"),
+    ],
+)
+def test_auto_model_selection_policy(monkeypatch, configured, policy, expected):
+    monkeypatch.setenv("LLM_MODEL", "auto")
+    monkeypatch.setenv("LLM_MODEL_POLICY", policy)
+    stub, _ = install_stub(
+        monkeypatch,
+        [
+            response(
+                payload=models_payload(
+                    "text-embedding-v3",
+                    "speech-audio-v1",
+                    "qwen3.8-flash-next",
+                    "Qwen3.8-27B",
+                )
+            )
+        ],
+    )
+    client = OpenAICompatibleClient(sleeper=lambda _: None)
+    client.ensure_model_available()
+
+    assert client.model == expected
+    assert client.public_metadata() == {
+        "provider": "openai_compatible",
+        "base_url": BASE_URL,
+        "model": expected,
+        "configured_model": "auto",
+        "model_available": True,
+    }
+    assert len(stub.calls) == 1
+
+
+def test_auto_excludes_unsuitable_models_when_chat_model_exists(
+    monkeypatch, configured
+):
+    monkeypatch.setenv("LLM_MODEL", "auto")
+    monkeypatch.setenv("LLM_MODEL_POLICY", "fast")
+    install_stub(
+        monkeypatch,
+        [response(payload=models_payload("audio-chat", "embedding-large", "chat-v1"))],
+    )
+    client = OpenAICompatibleClient(sleeper=lambda _: None)
+    client.ensure_model_available()
+    assert client.model == "chat-v1"
+
+
+@pytest.mark.parametrize(
+    ("policy", "models", "expected"),
+    [
+        ("fast", ("zeta-chat", "alpha-chat"), "alpha-chat"),
+        ("quality", ("mini-b", "flash-a"), "flash-a"),
+    ],
+)
+def test_auto_policy_falls_back_to_first_candidate(
+    monkeypatch, configured, policy, models, expected
+):
+    monkeypatch.setenv("LLM_MODEL", "auto")
+    monkeypatch.setenv("LLM_MODEL_POLICY", policy)
+    install_stub(monkeypatch, [response(payload=models_payload(*models))])
+    client = OpenAICompatibleClient(sleeper=lambda _: None)
+    client.ensure_model_available()
+    assert client.model == expected
 
 
 @pytest.mark.parametrize(
@@ -221,7 +296,7 @@ def test_chat_content_model_auth_reasoning_ignored_and_usage(
     assert (method, url) == ("POST", f"{BASE_URL}/chat/completions")
     assert kwargs["headers"] == {"Authorization": "Bearer runtime-secret"}
     assert kwargs["json"]["model"] == MODEL
-    assert kwargs["json"]["max_tokens"] == 1200
+    assert kwargs["json"]["max_tokens"] == 1800
     assert "tools" not in kwargs["json"]
     assert "observed facts" in kwargs["json"]["messages"][0]["content"]
     assert "Modern browsers reject wildcard" in SYSTEM_PROMPT

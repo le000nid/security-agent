@@ -26,8 +26,8 @@ from app.presentation import run_banner
         {"llm_planner_retry_max_tokens": 320},
         {"llm_planner_retry_max_tokens": 2049},
         {"llm_brief_max_tokens": 255},
-        {"llm_brief_retry_max_tokens": 8193},
-        {"llm_brief_retry_max_tokens": 2000},
+        {"llm_brief_retry_max_tokens": 32769},
+        {"llm_brief_retry_max_tokens": 5000},
     ],
 )
 def test_token_bounds(bad):
@@ -115,7 +115,7 @@ def test_brief_truncation_preserves_results(rig, both_truncated):
     run_deterministic(state, registry)
     assert [
         call.kwargs["json"]["max_tokens"] for call in http.request.call_args_list
-    ] == [1200, 2000, 3200]
+    ] == [1800, 6000, 10000]
     assert len(state.findings) == 1 and state.findings[0].id == finding.id
     assert state.findings[0].description == ENRICHMENT["description"]
     assert state.enrichment.completed == 1
@@ -140,14 +140,14 @@ def test_brief_truncation_preserves_results(rig, both_truncated):
 @pytest.mark.parametrize(
     "field,value",
     [
-        ("headline", "x" * 101),
-        ("overall_summary", "x" * 451),
-        ("top_findings", BRIEF["top_findings"] * 4),
-        ("top_findings", [{"finding_id": "sample", "why_it_matters": "x" * 181}]),
-        ("recommended_next_steps", ["step"] * 5),
-        ("recommended_next_steps", ["x" * 181]),
-        ("limitations", "x" * 301),
-        ("closing_line", "x" * 161),
+        ("headline", "x" * 201),
+        ("overall_summary", "x" * 6001),
+        ("top_findings", BRIEF["top_findings"] * 6),
+        ("top_findings", [{"finding_id": "sample", "why_it_matters": "x" * 1501}]),
+        ("recommended_next_steps", ["step"] * 9),
+        ("recommended_next_steps", ["x" * 1201]),
+        ("limitations", "x" * 2001),
+        ("closing_line", "x" * 701),
     ],
 )
 def test_small_brief_contract(field, value):
@@ -163,7 +163,7 @@ def test_brief_projection(rig):
         )
     ]
     projected = brief_input(state)["findings"][0]
-    assert len(projected["description"]) == 120
+    assert len(projected["description"]) == 500
     assert set(projected) == {
         "id",
         "title",
@@ -171,6 +171,8 @@ def test_brief_projection(rig):
         "source",
         "severity",
         "normalized_category",
+        "recommendation",
+        "confidence",
     }
 
 
@@ -180,7 +182,10 @@ def test_chat_transport_has_no_hidden_retries_or_scan_usage(rig, role, status):
     _, client, http, _, _ = rig
     http.request.return_value = httpx.Response(status, text="PRIVATE provider body")
     with pytest.raises(LLMError):
-        client.complete_json("test", "test", max_tokens=600, role=role)
+        method = (
+            client.complete_text if role == "chat_analysis" else client.complete_json
+        )
+        method("test", "test", max_tokens=600, role=role)
     assert http.request.call_count == client.usage_for(role).requests == 1
     assert (
         client.usage.requests

@@ -227,9 +227,11 @@ LLM_API_KEY=replace_me
 ```
 
 Бюджеты задаются переменными `LLM_PLANNER_*`, `LLM_ENRICHMENT_*`,
-`LLM_BRIEF_*` и `LLM_CHAT_*` из `.env.example`.
+`LLM_BRIEF_*` и `LLM_CHAT_*` из `.env.example`. Defaults: Planner `320/512`,
+enrichment `1800/3200`, AI Brief `6000/10000`, Chat Analyst `6000/10000` токенов
+для основной/повторной попытки; технический верхний предел — `32768`.
 
-AI Brief имеет ограниченный pipeline: обычная попытка, один concise retry после
+AI Brief имеет ограниченный pipeline: обычная попытка, один содержательный retry после
 truncation и один schema repair после ошибки JSON/schema. Максимум три логические
 попытки. Raw-ответ и reasoning не сохраняются; безопасная диагностика находится в
 `summary.json`.
@@ -316,7 +318,8 @@ URL, путь, shell-команда и scanner flags не могут прихо�
 | MongoDB benchmark не готов | проверьте профиль `nosqli-mongo`, Mongo health и API logs |
 
 Подробности: [устранение неполадок](docs/TROUBLESHOOTING.md),
-[реестр benchmark](docs/BENCHMARKS.md), [архитектура](docs/ARCHITECTURE.md).
+[реестр benchmark](docs/BENCHMARKS.md), [архитектура](docs/ARCHITECTURE.md),
+[VEGA adapter](docs/VEGA.md).
 
 ## Модель безопасности и ограничения
 

@@ -2,6 +2,7 @@
 
 import os
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
@@ -22,6 +23,7 @@ class Settings(BaseModel):
 
     llm_provider: str = ""
     llm_model: str = ""
+    llm_model_policy: Literal["fast", "quality"] = "fast"
     llm_base_url: str = ""
     llm_api_key: SecretStr = Field(default=SecretStr(""), exclude=True, repr=False)
     agent_max_steps: int = Field(default=8, ge=1, le=100)
@@ -29,13 +31,13 @@ class Settings(BaseModel):
     llm_planner_max_tokens: int = Field(default=320, ge=256, le=2048)
     llm_planner_retry_max_tokens: int = Field(default=512, ge=256, le=2048)
     llm_enrichment_batch_size: int = Field(default=1, ge=1, le=20)
-    llm_enrichment_max_tokens: int = Field(default=1200, ge=256, le=8192)
-    llm_enrichment_retry_max_tokens: int = Field(default=2200, ge=256, le=8192)
+    llm_enrichment_max_tokens: int = Field(default=1800, ge=256, le=32768)
+    llm_enrichment_retry_max_tokens: int = Field(default=3200, ge=256, le=32768)
     llm_brief_enabled: bool = True
-    llm_brief_max_tokens: int = Field(default=2000, ge=256, le=8192)
-    llm_brief_retry_max_tokens: int = Field(default=3200, ge=256, le=8192)
-    llm_chat_max_tokens: int = Field(default=2400, ge=256, le=8192)
-    llm_chat_retry_max_tokens: int = Field(default=3600, ge=256, le=8192)
+    llm_brief_max_tokens: int = Field(default=6000, ge=256, le=32768)
+    llm_brief_retry_max_tokens: int = Field(default=10000, ge=256, le=32768)
+    llm_chat_max_tokens: int = Field(default=6000, ge=256, le=32768)
+    llm_chat_retry_max_tokens: int = Field(default=10000, ge=256, le=32768)
     llm_report_tone: ReportTone = ReportTone.PROFESSIONAL
     llm_report_language: ReportLanguage = ReportLanguage.RU
 
