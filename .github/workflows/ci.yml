@@ -50,6 +50,8 @@ jobs:
           export AGENT_UID=$(id -u) AGENT_GID=$(id -g)
           docker compose --profile agent run --rm --no-deps --entrypoint python agent \
             -m benchmark.verify_sast_regressions --output-dir /agent/logs/sast-regression
+          docker compose --profile agent run --rm --no-deps --entrypoint python agent \
+            -m benchmark.verify_vega_p2_sast
       - name: Upload SAST regression reports
         if: always()
         uses: actions/upload-artifact@v4
