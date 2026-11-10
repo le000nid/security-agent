@@ -170,3 +170,33 @@ def test_atomic_report_failure_keeps_valid_previous_json(tmp_path, monkeypatch):
         runner.save_report(tmp_path, {"status": "passed"})
     assert json.loads(destination.read_text()) == {"status": "running"}
     assert list(tmp_path.glob(".summary-*.tmp")) == []
+
+
+@pytest.mark.parametrize("recover", [True, False])
+def test_windows_report_lock_retries_are_bounded(tmp_path, monkeypatch, recover):
+    destination = tmp_path / "summary.json"
+    destination.write_text('{"status":"running"}')
+    original_replace = runner.Path.replace
+    attempts = 0
+
+    def briefly_locked(source, target):
+        nonlocal attempts
+        attempts += 1
+        assert json.loads(destination.read_text()) == {"status": "running"}
+        if recover and attempts == 3:
+            return original_replace(source, target)
+        error = PermissionError("injected Windows file lock")
+        error.winerror = 5
+        raise error
+
+    monkeypatch.setattr(runner.Path, "replace", briefly_locked)
+    if recover:
+        runner.save_report(tmp_path, {"status": "passed"})
+        assert attempts == 3
+        assert json.loads(destination.read_text()) == {"status": "passed"}
+    else:
+        with pytest.raises(PermissionError, match="Windows file lock"):
+            runner.save_report(tmp_path, {"status": "passed"})
+        assert attempts == 4
+        assert json.loads(destination.read_text()) == {"status": "running"}
+    assert list(tmp_path.glob(".summary-*.tmp")) == []

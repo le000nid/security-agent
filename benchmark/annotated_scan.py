@@ -49,8 +49,8 @@ def verify(payload, fixtures, files):
     scanned = payload["paths"]["scanned"]
     if not isinstance(scanned, list):
         raise TypeError("Expected a scanned paths array")
-    # Generic rules can also scan the suite's documentation. It is optional
-    # scan input, never an allowed finding or a replacement for a code fixture.
+    # Generic rules can also scan the suite documentation. It is optional scan
+    # input, never an allowed finding or a replacement for a source fixture.
     docs = {"README.md"} if (fixtures / "README.md").is_file() else set()
     names = Counter(fixture_name(p, fixtures, files | docs) for p in scanned)
     if set(names) - docs != files or any(count != 1 for count in names.values()):

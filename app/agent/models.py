@@ -88,6 +88,7 @@ class ToolResult(BaseModel):
     error: str | None = None
     error_code: str | None = None
     raw_output_ref: str | None = None
+    warnings: list[str] = Field(default_factory=list)
     findings: list[Finding] = Field(default_factory=list)
     rationales: dict[str, str] = Field(default_factory=dict)
     enrichment: EnrichmentStats | None = None
@@ -100,6 +101,7 @@ class AgentState(BaseModel):
     mode: Literal["sast", "dast", "full"] | None = None
     benchmark_id: str | None = None
     benchmark_name: str | None = None
+    nosqli_profiles: list[str] = Field(default_factory=list)
     benchmark_expected: str | None = None
     same_application: bool = False
     llm_enabled: bool = False

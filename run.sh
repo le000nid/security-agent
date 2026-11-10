@@ -7,8 +7,10 @@ command="${1:-agent}"
 if [ "$#" -gt 0 ]; then shift; fi
 case "$command" in agent|scan|deterministic|doctor|latest|ui|benchmarks) ;; *) fail 'Use agent, scan, deterministic, doctor, latest, ui, or benchmarks.' ;; esac
 if [ "$command" = ui ]; then
-  start_lab
-  docker compose --profile ui up -d --wait --wait-timeout 180 ui
+  ensure_image
+  start_all_benchmark_labs
+  # Reapply changed .env values without touching bind-mounted runs/logs/reports.
+  docker compose --profile ui up -d --no-deps --force-recreate --wait --wait-timeout 180 ui
   printf 'AI Security Agent UI: http://127.0.0.1:8080\n'
   exit 0
 fi
@@ -29,10 +31,13 @@ case "$command" in agent|scan|deterministic)
     elif [ "$benchmark" = juice-shop ] || { [ -z "$benchmark" ] && $has_target && ! $has_source; }; then scope=dast
     else scope=full; fi
   fi
-  [ "$scope" = sast ] || start_lab
+  if [ "$scope" != sast ]; then
+    if [ -n "$benchmark" ]; then start_benchmark_lab "$benchmark"; else start_benchmark_lab juice-shop; fi
+  fi
   if [ -z "$benchmark" ]; then
     if [ "$scope" != sast ] && ! $has_target; then set -- --target-url http://juice-shop:3000 "$@"; fi
     if [ "$scope" != dast ] && ! $has_source; then set -- --source-path /targets/sample-app "$@"; fi
   fi
 ;; esac
+ensure_image
 docker compose --profile agent run --rm --no-deps agent "$command" "$@"

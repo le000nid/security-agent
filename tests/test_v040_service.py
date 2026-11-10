@@ -53,12 +53,33 @@ def test_builtin_registry():
     registry = BenchmarkRegistry.load()
     assert {b.id for b in registry.list()} == {
         "sample-sast",
-        "sast-secrets",
         "juice-shop",
         "demo-full",
+        "nosqli-sast",
+        "nosqli-dast",
+        "nosqli-mongo-full",
+        "nosqli-profile-catalog",
+        "nosqli-profile-catalog-safe",
+        "nosqli-profile-inventory",
+        "nosqli-profile-inventory-safe",
+        "nosqli-sast-matrix",
         "sast-contours",
+        "sast-secrets",
+        "dan-lab",
+        "ssrf-lab",
+        "spoofing-sast",
+        "security-key-lab",
     }
-    assert registry.trusted_hosts() == {"juice-shop", "demo-full"}
+    assert registry.trusted_hosts() == {
+        "juice-shop",
+        "demo-full",
+        "nosqli-lab",
+        "nosqli-mongo-api",
+        "nosqli-portable-api",
+        "dan-lab",
+        "ssrf-lab",
+        "security-key-lab",
+    }
     assert validate_target_url("http://demo-full:3000") == "http://demo-full:3000"
     assert Path(registry.get("demo-full").local_source()).is_dir()
     with pytest.raises(ValueError, match="benchmark_not_found"):

@@ -1,0 +1,28 @@
+id: juice-shop-search-sqlite-error
+
+info:
+  name: Juice Shop search SQLite error disclosure
+  author: Step762
+  severity: low
+  tags: juice-shop,sqlite,information-disclosure
+  description: >
+    The search endpoint exposes an internal SQLite error after
+    a single-quote input. This finding does not confirm SQL injection.
+  remediation: >
+    Return generic errors to clients and keep database details in
+    server logs. Use parameterized SQL queries.
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/rest/products/search?q=apple%27"
+    redirects: false
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 500
+      - type: word
+        part: body
+        words:
+          - "SQLITE_ERROR"

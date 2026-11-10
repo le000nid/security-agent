@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent
 def test_semgrep_rules_are_curated_local_rules() -> None:
     config = yaml.safe_load(RULES.read_text(encoding="utf-8"))
     rules = config["rules"]
-    assert 6 <= len(rules) <= 20
+    assert len(rules) >= 20
     assert len({rule["id"] for rule in rules}) == len(rules)
     for rule in rules:
         assert rule["languages"]
@@ -49,7 +49,7 @@ def test_expected_semgrep_results_normalize_for_sample_target(tmp_path: Path) ->
             {
                 "results": results,
                 "errors": [],
-                "paths": {"scanned": sorted({record["path"] for record in results})},
+                "paths": {"scanned": ["targets/sample-app/app.py"]},
             }
         ),
         encoding="utf-8",

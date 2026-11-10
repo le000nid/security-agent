@@ -47,7 +47,7 @@ def test_semgrep_parser(tmp_path, semgrep_record):
             {
                 "results": [semgrep_record],
                 "errors": [],
-                "paths": {"scanned": [semgrep_record["path"]]},
+                "paths": {"scanned": ["app.py"]},
             }
         )
     )
@@ -83,7 +83,7 @@ def test_semgrep_evidence_never_uses_requires_login(tmp_path, semgrep_record, ru
             {
                 "results": [semgrep_record],
                 "errors": [],
-                "paths": {"scanned": [semgrep_record["path"]]},
+                "paths": {"scanned": ["app.py"]},
             }
         ),
         encoding="utf-8",
@@ -379,7 +379,7 @@ def test_full_orchestration(monkeypatch, tmp_path, semgrep_record):
                 {
                     "results": [semgrep_record],
                     "errors": [],
-                    "paths": {"scanned": [semgrep_record["path"]]},
+                    "paths": {"scanned": ["app.py"]},
                 }
             )
         )

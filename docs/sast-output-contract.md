@@ -1,37 +1,22 @@
 # SAST scanner output contract
 
-The Semgrep adapter accepts a successful scan only when the JSON has a results
-array, an empty errors array and a nonempty `paths.scanned` array. A scan that
-processed no eligible source files is a failure, even when results is empty.
-Check the selected source, supported languages and scan filters in that case.
+Semgrep adapter принимает успешный скан только при наличии массива `results`,
+пустого массива `errors` и непустого `paths.scanned`. Нулевое покрытие файлов —
+ошибка, даже если находок нет. Пропущенные правила (`skipped_rules`) также
+отклоняются.
 
-If the scanner reports skipped configured rules, the adapter rejects the scan.
-This does not prohibit every ignored file: unsupported extensions, configured
-excludes and language coverage still need review. Nonempty scanned paths alone
-do not prove that every source file in a project was analyzed.
+Каждая находка должна иметь непустой ID, относиться к просканированному пути и
+содержать положительную целочисленную строку; колонка, если есть, тоже должна быть
+положительной. Дублирующиеся JSON-поля, некорректные записи и несогласованные пути
+отклоняются. UTF-8 BOM и Unicode-пути поддерживаются.
 
-Finding IDs must be nonempty strings. Every finding must refer to a scanned
-path and have a positive integer line; a supplied column must also be a positive
-integer. Booleans are not coordinates. Duplicate JSON fields are rejected,
-including duplicates that would overwrite findings with an empty results array.
-UTF-8 BOM and Unicode source paths are accepted.
+Некорректный ответ не превращается в успешный результат с нулём находок. При этом
+пустой `results` остаётся допустимым для корректного непустого скана.
 
-Malformed and incomplete responses propagate through the existing SAST failure
-handling: nonzero run exit code, failed SAST status and a saved failure report.
-The adapter does not turn such responses into a successful zero-finding result.
-An empty results array remains valid when the scan coverage metadata is present.
+## Защита от подавления в исходниках
 
-Tests cover the parser boundary and four additional end-to-end simulated scanner
-failures. Earlier scanner mocks were updated to carry the same errors and scanned
-paths fields as the project's real Semgrep JSON, rather than incomplete stubs.
-These checks concern the SAST adapter and require no API/UI changes.
-
-## Source-controlled finding suppression
-
-Source code is untrusted during an independent audit. The adapter passes
-`--disable-nosem`: `nosemgrep` and `nosem` comments in scanned code cannot suppress
-findings. This intentionally overrides Semgrep's normal developer opt-out behavior.
-The real scanner contract check includes SQLi, LFI and RFI examples with inline
-and rule-specific preceding comments and requires all four findings.
-This closes inline suppression only; file ignore rules and incomplete language
-coverage remain separate limitations described above.
+Исходный код считается недоверенным вводом независимого аудита. Runner передаёт
+`--disable-nosem`, поэтому комментарии `nosemgrep` и `nosem` не могут скрыть
+находки. Реальный contract benchmark проверяет SQLi, LFI и RFI с inline- и
+rule-specific комментариями. Это закрывает только inline suppression; ignore-файлы
+и ограничения языкового покрытия остаются отдельными ограничениями.

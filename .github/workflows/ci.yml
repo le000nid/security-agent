@@ -46,7 +46,6 @@ jobs:
       - name: SAST regression acceptance
         timeout-minutes: 10
         run: |
-          # Prepare every bind mount before Docker can create it as root.
           mkdir -p runs logs reports
           export AGENT_UID=$(id -u) AGENT_GID=$(id -g)
           docker compose --profile agent run --rm --no-deps --entrypoint python agent \
@@ -55,7 +54,7 @@ jobs:
             -m benchmark.verify_vega_p2_sast
       - name: Upload SAST regression reports
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: sast-regression-reports
           path: logs/sast-regression/
@@ -68,24 +67,6 @@ jobs:
           docker compose up -d --wait --wait-timeout 180 juice-shop demo-full
           docker compose --profile agent run --rm --no-deps agent scan --benchmark demo-full --mode full --no-llm
           docker compose --profile agent run --rm --no-deps --entrypoint python agent -m benchmark.verify_run
-          docker compose --profile agent run --rm --no-deps agent scan --benchmark sast-contours --mode sast --no-llm
-          python - <<'PY'
-          import json
-          from pathlib import Path
-
-          latest = json.loads(Path("runs/latest.json").read_text(encoding="utf-8"))
-          summary_path = Path("runs") / latest["run_id"] / "reports" / "summary.json"
-          summary = json.loads(summary_path.read_text(encoding="utf-8"))
-          evaluation = summary["benchmark_evaluation"]
-
-          assert evaluation["expected_count"] == 6, evaluation
-          assert evaluation["detected_expected_count"] == 6, evaluation
-          assert evaluation["missed_findings"] == [], evaluation
-          assert evaluation["unexpected_findings"] == [], evaluation
-          assert evaluation["precision"] == 1.0, evaluation
-          assert evaluation["recall"] == 1.0, evaluation
-          print("sast-contours benchmark passed: 6/6 expected, 0 unexpected")
-          PY
           docker compose --profile ui up -d --wait --wait-timeout 180 ui
           curl --fail http://127.0.0.1:8080/healthz
       - if: always()

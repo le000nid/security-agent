@@ -193,9 +193,9 @@ def test_invalid_configuration_rejected(fields):
         ),
         ({**BRIEF, "findings": [{"id": "invented"}]}, "brief_schema_validation_error"),
         ({**BRIEF, "command": "whoami"}, "brief_schema_validation_error"),
-        ({**BRIEF, "headline": "x" * 121}, "brief_schema_validation_error"),
+        ({**BRIEF, "headline": "x" * 201}, "brief_schema_validation_error"),
         (
-            {**BRIEF, "recommended_next_steps": ["step"] * 6},
+            {**BRIEF, "recommended_next_steps": ["step"] * 9},
             "brief_schema_validation_error",
         ),
         ({**BRIEF, "overall_summary": " "}, "brief_schema_validation_error"),

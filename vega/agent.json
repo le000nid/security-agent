@@ -1,0 +1,6 @@
+{
+  "name": "security-agent-vega",
+  "version": "0.1.0",
+  "entrypoint": "run.sh",
+  "description": "Bounded LLM-guided evidence agent with fixed filesystem, Git, HTTP and artifact tools"
+}

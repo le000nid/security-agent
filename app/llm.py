@@ -9,7 +9,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.config import Settings
-from app.llm_output import ChatResponseTruncated, LLMError, validate_output
+from app.llm_output import LLMError, validate_output
 from app.models import Finding, NormalizedCategory, Severity
 from app.safe_logging import redact
 
@@ -251,6 +251,7 @@ class OpenAICompatibleClient:
             "provider": self.provider,
             "base_url": self.base_url,
             "model": self.model,
+            "configured_model": self.settings.llm_model,
             "model_available": self.model_available,
         }
 
@@ -316,8 +317,40 @@ class OpenAICompatibleClient:
         context = "Model discovery" if discovery else "LLM completion"
         raise ValueError(f"{context} failed: {detail}")
 
+    def _select_model(self, models: tuple[str, ...]) -> str:
+        unsuitable = ("embedding", "embed", "rerank", "audio", "whisper", "tts")
+        suitable = tuple(
+            model
+            for model in models
+            if not any(marker in model.casefold() for marker in unsuitable)
+        )
+        candidates = suitable or models
+        if not candidates:
+            raise ValueError("No models available from the configured provider")
+
+        if self.settings.llm_model_policy == "fast":
+            for marker in ("flash", "mini", "turbo"):
+                match = next(
+                    (model for model in candidates if marker in model.casefold()), None
+                )
+                if match:
+                    return match
+        else:
+            match = next(
+                (
+                    model
+                    for model in candidates
+                    if "flash" not in model.casefold()
+                    and "mini" not in model.casefold()
+                ),
+                None,
+            )
+            if match:
+                return match
+        return candidates[0]
+
     def ensure_model_available(self) -> None:
-        """Validate the configured exact model ID once for this client."""
+        """Resolve ``auto`` or validate an exact configured model ID once."""
 
         if self._model_available:
             return
@@ -336,7 +369,9 @@ class OpenAICompatibleClient:
         ):
             raise ValueError("Invalid OpenAI-compatible model discovery response")
         self.available_model_ids = tuple(sorted({item["id"] for item in data}))
-        if self.model not in self.available_model_ids:
+        if self.model.casefold() == "auto":
+            self.model = self._select_model(self.available_model_ids)
+        elif self.model not in self.available_model_ids:
             preview = ", ".join(self.available_model_ids[:10]) or "none"
             raise ValueError(
                 redact(
@@ -362,14 +397,25 @@ class OpenAICompatibleClient:
         )
         return validate_output(content, Enrichment, "enrichment")
 
-    def complete_json(
-        self, system: str, user: str, *, max_tokens: int, role: str = "enrichment"
+    def _complete(
+        self,
+        system: str,
+        user: str,
+        *,
+        max_tokens: int,
+        role: str,
+        json_mode: bool,
     ) -> str:
+        """Call Chat Completions without exposing reasoning or tool calls.
+
+        Structured callers reject truncated JSON. Text callers keep non-empty
+        partial content and expose only safe envelope metadata to their owner.
+        """
+
         self.last_response_meta[role] = {}
         self.ensure_model_available()
         request_body: dict[str, object] = {
             "model": self.model,
-            "response_format": {"type": "json_object"},
             "max_tokens": max_tokens,
             "messages": [
                 {"role": "system", "content": system},
@@ -379,6 +425,8 @@ class OpenAICompatibleClient:
                 },
             ],
         }
+        if json_mode:
+            request_body["response_format"] = {"type": "json_object"}
         response = self._request("POST", self.chat_url, payload=request_body, role=role)
         if not 200 <= response.status_code < 300:
             raise LLMError(
@@ -400,15 +448,14 @@ class OpenAICompatibleClient:
             "reasoning_present": bool(
                 message.get("reasoning") or message.get("reasoning_content")
             ),
+            "truncated": reason == "length",
         }
-        if role == "chat_analysis" and message.get("tool_calls"):
+        if message.get("tool_calls"):
             raise LLMError(role, "schema_validation_error")
-        if choice.get("finish_reason") == "length":
-            if role == "chat_analysis" and not message.get("tool_calls"):
-                raise ChatResponseTruncated(content if isinstance(content, str) else "")
+        if reason == "length" and json_mode:
+            # A structured caller must never salvage or execute truncated JSON,
+            # including an empty provider fragment.
             raise LLMError(role, "response_truncated")
-        if choice.get("finish_reason") != "stop" or message.get("tool_calls"):
-            raise LLMError(role, "schema_validation_error")
         if (
             content is None
             or content == ""
@@ -418,7 +465,35 @@ class OpenAICompatibleClient:
             raise LLMError(role, "empty_content")
         if not isinstance(content, str):
             raise LLMError(role, "schema_validation_error")
-        return content
+        if reason not in ("stop", "length") or json_mode and reason != "stop":
+            raise LLMError(role, "schema_validation_error")
+        return content.strip()
+
+    def complete_json(
+        self, system: str, user: str, *, max_tokens: int, role: str = "enrichment"
+    ) -> str:
+        """Return a complete JSON response for an application contract."""
+
+        return self._complete(
+            system,
+            user,
+            max_tokens=max_tokens,
+            role=role,
+            json_mode=True,
+        )
+
+    def complete_text(
+        self, system: str, user: str, *, max_tokens: int, role: str = "chat_analysis"
+    ) -> str:
+        """Return ordinary assistant text, preserving non-empty truncated content."""
+
+        return self._complete(
+            system,
+            user,
+            max_tokens=max_tokens,
+            role=role,
+            json_mode=False,
+        )
 
     def enrich_batch(
         self,

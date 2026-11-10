@@ -39,7 +39,7 @@ const errors = {
   csrf_failed:"Защитный токен страницы устарел. Обновите локальную страницу.",
   brief_response_truncated:"Ответ для итога ИИ обрезан провайдером; результаты сканеров сохранены.",
   planner_response_truncated:"Ответ Planner обрезан. Повтор ограничен бюджетом запросов.",
-  chat_response_truncated:"Распознавание запроса обрезано. Выберите сохранённый запуск для анализа или готовое действие чата. Подключение сохранено.",
+  chat_response_truncated:"Ответ ИИ достиг ограничения длины. Полезная часть сохранена, можно продолжить готовым действием.",
   chat_json_invalid:"ИИ вернул некорректный JSON. Подключение сохранено.",
   chat_schema_invalid:"Ответ ИИ не прошёл проверку структуры или ссылок на находки. Подключение сохранено.",
   chat_context_mismatch:"Контекст ответа не совпал с выбранным запуском или находкой.",
@@ -67,6 +67,17 @@ function node(tag, text, cls) {
 function status(value) { return statuses[value] || "нет данных"; }
 function errorText(code) { return (errors[code] || "Не удалось выполнить операцию.") + (code ? " (" + code + ")" : ""); }
 function counts(data) { return Object.entries(data || {}).map(([key, value]) => key.toUpperCase() + ": " + value).join(" · ") || "нет"; }
+const categoryNames = {
+  security_headers:"Заголовки безопасности", cors:"CORS", secrets:"Секреты и ключи",
+  code_execution:"Выполнение кода", unsafe_deserialization:"Небезопасная десериализация",
+  tls_configuration:"Настройки TLS", debug_configuration:"Режим отладки",
+  injection:"Инъекция", authentication:"Аутентификация", authorization:"Авторизация",
+  information_exposure:"Раскрытие информации", other:"Другая категория",
+  "sql-injection":"SQL Injection", "local-file-inclusion":"LFI",
+  "remote-file-inclusion":"RFI", "prompt-injection":"Prompt Injection",
+  "nosql-injection":"NoSQL Injection", ssrf:"SSRF", spoofing:"Подмена ARP/DNS"
+};
+function categoryName(value) { return categoryNames[value] || value || "Без категории"; }
 function orchestration(value) { return value === "agent" ? "ИИ-агент" : "Обычное сканирование"; }
 function notify(message) { $("notice").textContent = message; }
 function fail(error) { notify(error.message || "Не удалось выполнить операцию."); }
@@ -236,7 +247,7 @@ async function openRun(id) {
   $("severity").value = ""; $("source").value = "";
   const all = node("option", "Все категории"); all.value = ""; $("category").replaceChildren(all);
   for (const category of [...new Set(findings.map(f => f.normalized_category || f.category))].sort()) {
-    const option = node("option", category); option.value = category; $("category").append(option);
+    const option = node("option", categoryName(category)); option.value = category; $("category").append(option);
   }
   $("finding-detail").hidden = true; renderFindings(); show("detail");
 }
@@ -249,7 +260,7 @@ function renderFindings() {
   for (const f of findings) {
     const tr = node("tr"); tr.append(node("td", f.severity.toUpperCase(), "severity " + f.severity));
     const title = node("td"), button = node("button", f.title); button.onclick = () => findingDetail(f); title.append(button);
-    tr.append(title, node("td", f.source + " / " + f.tool), node("td", f.normalized_category || f.category), node("td", f.location));
+    tr.append(title, node("td", f.source + " / " + f.tool), node("td", categoryName(f.normalized_category || f.category)), node("td", f.location));
     $("findings").append(tr);
   }
   $("finding-count").textContent = "Показано находок: " + findings.length + " из " + allFindings.length;
@@ -273,10 +284,20 @@ function renderBrief(el, brief) {
     el.append(node("p", "Итог ИИ: " + status(brief.status)), node("small", "Доступность результатов сканеров и обычного отчёта указана в статусах этапов выше."));
     return;
   }
-  el.append(node("h3", brief.headline), node("p", brief.overall_summary));
-  for (const item of brief.top_findings || []) el.append(node("p", item.finding_id + " — " + item.why_it_matters));
-  for (const step of brief.recommended_next_steps || []) el.append(node("p", "Следующий шаг: " + step));
-  el.append(node("p", "Ограничения: " + brief.limitations), node("p", brief.closing_line));
+  el.append(node("h3", brief.headline), node("p", brief.overall_summary, "answer"));
+  if (brief.top_findings?.length) {
+    el.append(node("h3", "Главные находки"));
+    const findings = node("ul");
+    for (const item of brief.top_findings) findings.append(node("li", item.finding_id + " — " + item.why_it_matters));
+    el.append(findings);
+  }
+  if (brief.recommended_next_steps?.length) {
+    el.append(node("h3", "Что делать дальше"));
+    const steps = node("ol");
+    for (const step of brief.recommended_next_steps) steps.append(node("li", step));
+    el.append(steps);
+  }
+  el.append(node("h3", "Ограничения"), node("p", brief.limitations, "answer"), node("p", brief.closing_line, "answer"));
 }
 async function refreshChatRuns(preferred, findingId) {
   const previousRun = preferred || $("chat-run").value;
@@ -356,12 +377,12 @@ function chatReply(data) {
       const prior = node("details"); prior.append(node("summary", "Первая часть исходного ответа (до повтора)"));
       prior.append(node("p", analysisText(a.previous_partial), "answer")); card.append(prior);
     }
-    if (a.referenced_finding_ids.length) card.append(node("h3", "Связанные находки"));
-    for (const id of a.referenced_finding_ids) card.append(findingLink(data.run_id, id, chatFindings.find(f => f.id === id)?.title || id));
-    if (a.caveats.length) card.append(node("h3", "Ограничения"));
-    for (const text of a.caveats) card.append(node("p", text));
-    if (a.suggested_next_questions.length) card.append(node("h3", "Можно спросить дальше"));
-    for (const question of a.suggested_next_questions) {
+    if (a.referenced_finding_ids?.length) card.append(node("h3", "Связанные находки"));
+    for (const id of (a.referenced_finding_ids || [])) card.append(findingLink(data.run_id, id, chatFindings.find(f => f.id === id)?.title || id));
+    if (a.caveats?.length) card.append(node("h3", "Ограничения"));
+    for (const text of (a.caveats || [])) card.append(node("p", text));
+    if (a.suggested_next_questions?.length) card.append(node("h3", "Можно спросить дальше"));
+    for (const question of (a.suggested_next_questions || [])) {
       const b = node("button", question); b.onclick = () => sendChat({message:question, run_id:data.run_id}, question); card.append(b);
     }
     if (a.truncated) {
@@ -370,7 +391,7 @@ function chatReply(data) {
         if (a.follow_up_actions && !a.follow_up_actions.includes(mode)) continue;
         const button = node("button", label);
         button.onclick = () => sendChat({run_id:data.run_id, finding_id:data.finding_id || null,
-          action:{intent:"ANALYZE_RUN"}, follow_up:mode, previous_answer:analysisText(a).slice(0,2400), message:data.question || "Анализ выбранного запуска"}, label);
+          action:{intent:"ANALYZE_RUN"}, follow_up:mode, previous_answer:analysisText(a).slice(0,12000), message:data.question || "Анализ выбранного запуска"}, label);
         followups.append(button);
       }
       const one = node("button", "Разобрать по одной находке");

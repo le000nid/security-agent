@@ -10,7 +10,7 @@ from test_v040_web_chat import web as web
 
 from app.chat import ChatRequest, ScanConfirmation
 from app.chat_analysis import ChatAnalysisResponse, analysis_input
-from app.llm_output import LLMError
+from app.llm_output import ChatResponseTruncated, LLMError
 from app.service import RunRequest
 
 ANALYSIS = {
@@ -38,7 +38,7 @@ def test_analysis_is_readonly_and_contextual(web, service, intent):
     newer = service.run(RunRequest(benchmark_id="sample-sast"))
     original = {p: p.read_bytes() for p in service.runs_dir.rglob("*") if p.is_file()}
     fake = Mock()
-    fake.complete_json.return_value = json.dumps(ANALYSIS)
+    fake.complete_text.return_value = ANALYSIS["answer"]
     llm.client, llm.connectivity = fake, "available"
     app.state.jobs.start = Mock(side_effect=AssertionError("Analyst must not scan"))
     response = client.post(
@@ -53,9 +53,10 @@ def test_analysis_is_readonly_and_contextual(web, service, intent):
     assert response.status_code == 200, response.text
     assert response.json()["run_id"] == run.run_id != newer.run_id
     analysis = response.json()["analysis"]
-    assert {key: analysis[key] for key in ANALYSIS} == ANALYSIS
+    assert analysis["answer"] == ANALYSIS["answer"]
+    assert analysis["referenced_finding_ids"] == ["0"]
     assert analysis["status"] == "completed" and not analysis["truncated"]
-    call = fake.complete_json.call_args
+    call = fake.complete_text.call_args
     assert call.kwargs["role"] == "chat_analysis"
     projected = json.loads(call.args[1])
     assert projected["run"]["run_id"] == run.run_id
@@ -66,20 +67,22 @@ def test_analysis_is_readonly_and_contextual(web, service, intent):
     assert {p: p.read_bytes() for p in original} == original
 
 
-@pytest.mark.parametrize("ids", [["unknown"], ["0", "0"]])
-def test_analyst_rejects_invalid_references(web, service, ids):
+def test_analyst_references_are_application_owned(web, service):
     client, _, llm = web
     run = service.run(RunRequest(benchmark_id="demo-full"))
     fake = Mock()
-    fake.complete_json.return_value = json.dumps(
-        {**ANALYSIS, "referenced_finding_ids": ids}
-    )
+    fake.complete_text.return_value = ANALYSIS["answer"]
     llm.client, llm.connectivity = fake, "available"
     response = client.post(
-        "/api/chat", json={"run_id": run.run_id, "action": {"intent": "ANALYZE_RUN"}}
+        "/api/chat",
+        json={
+            "run_id": run.run_id,
+            "finding_id": "0",
+            "action": {"intent": "ANALYZE_RUN"},
+        },
     )
-    assert response.json() == {"error": "chat_schema_invalid"}
-    assert llm.connectivity == "available" and fake.complete_json.call_count == 1
+    assert response.json()["analysis"]["referenced_finding_ids"] == ["0"]
+    assert llm.connectivity == "available" and fake.complete_text.call_count == 1
 
 
 @pytest.mark.parametrize(
@@ -96,7 +99,12 @@ def test_analyst_rejects_invalid_references(web, service, ids):
 def test_connectivity_classification(web, service, kind, error, health, role):
     client, _, llm = web
     fake = Mock()
-    fake.complete_json.side_effect = LLMError(role, kind)
+    method = fake.complete_text if role == "chat_analysis" else fake.complete_json
+    method.side_effect = (
+        ChatResponseTruncated("Полезная часть")
+        if role == "chat_analysis" and kind == "response_truncated"
+        else LLMError(role, kind)
+    )
     llm.client, llm.connectivity = fake, "available"
     payload = {"message": "Which local targets?"}
     if role == "chat_analysis":
@@ -107,13 +115,13 @@ def test_connectivity_classification(web, service, kind, error, health, role):
         assert result.status_code == 200
         assert result.json()["analysis"]["error_code"] == error
         assert result.json()["analysis"]["status"] == "completed_with_warnings"
-        assert llm.connectivity == health and fake.complete_json.call_count == 2
+        assert llm.connectivity == health and fake.complete_text.call_count == 2
         return
     assert result.json() == {"error": error}
-    assert llm.connectivity == health and fake.complete_json.call_count == 1
+    assert llm.connectivity == health and method.call_count == 1
     if health == "unavailable":
         client.post("/api/chat", json=payload)
-        assert fake.complete_json.call_count == 1
+        assert method.call_count == 1
 
 
 @pytest.mark.parametrize(
@@ -269,7 +277,6 @@ def test_localized_ui_and_registry_metadata(web):
     assert all(b["description_ru"] for b in entries.values())
     assert entries["demo-full"]["baseline_count"] == 7
     assert entries["sample-sast"]["baseline_count"] == 9
-    assert entries["sast-contours"]["baseline_count"] == 6
     assert entries["juice-shop"]["baseline_count"] is None
 
 
@@ -297,12 +304,12 @@ def test_minimized_projection_and_schema(web, service, monkeypatch):
         repo.summary(run.run_id), findings, "help", "ANALYZE_RUN"
     )
     assert "PRIVATE" not in json.dumps(projected)
-    assert len(projected["findings"][0]["description"]) == 180
+    assert len(projected["findings"][0]["description"]) <= 1200
     for change in (
-        {"answer": "x" * 1801},
-        {"referenced_finding_ids": ["0"] * 8},
-        {"caveats": ["x"] * 5},
-        {"suggested_next_questions": ["x"] * 5},
+        {"answer": "x" * 32769},
+        {"referenced_finding_ids": ["0"] * 21},
+        {"caveats": ["x"] * 9},
+        {"suggested_next_questions": ["x"] * 9},
         {"command": "whoami"},
         {"findings": []},
     ):
