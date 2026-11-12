@@ -20,6 +20,7 @@ dependencies = [
 
 [project.scripts]
 security-agent = "app.main:main"
+security-agent-history-audit = "app.git_history_audit:main"
 
 [tool.setuptools.packages.find]
 include = ["app*", "benchmark*"]
