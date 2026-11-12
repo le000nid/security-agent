@@ -20,7 +20,11 @@ def audit_history(source: Path, limit: int) -> dict:
     if metadata.is_symlink() or not (metadata.is_dir() or metadata.is_file()):
         raise ValueError("Pass the root of a local Git working tree")
 
-    env = {key: value for key, value in os.environ.items() if not key.upper().startswith("GIT_")}
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.upper().startswith("GIT_")
+    }
     env.update(
         GIT_ALLOW_PROTOCOL="",
         GIT_CONFIG_GLOBAL=os.devnull,
@@ -30,15 +34,31 @@ def audit_history(source: Path, limit: int) -> dict:
         GIT_TERMINAL_PROMPT="0",
     )
     git = ["git", "--no-pager", "--no-replace-objects", "-c", "core.fsmonitor=false"]
-    git_dir = _git_output(root, env, git, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    git_dir = _git_output(
+        root, env, git, "rev-parse", "--path-format=absolute", "--git-common-dir"
+    )
     objects = Path(os.fsdecode(git_dir.rstrip(b"\r\n"))) / "objects" / "info"
     if any((objects / name).exists() for name in ("alternates", "http-alternates")):
         raise ValueError("Repositories using external object stores are unsupported")
 
     output = _git_output(
-        root, env, git, "log", "--all", "--full-history", "--format=%H",
-        "--no-patch", "--no-show-signature", "--no-notes", "--no-ext-diff", "--no-textconv",
-        "--regexp-ignore-case", f"--max-count={limit + 1}", "-G", ASSIGNMENT, "--",
+        root,
+        env,
+        git,
+        "log",
+        "--all",
+        "--full-history",
+        "--format=%H",
+        "--no-patch",
+        "--no-show-signature",
+        "--no-notes",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--regexp-ignore-case",
+        f"--max-count={limit + 1}",
+        "-G",
+        ASSIGNMENT,
+        "--",
     )
     hashes = output.splitlines()
     if any(COMMIT_ID.fullmatch(value) is None for value in hashes):
@@ -61,7 +81,9 @@ def _git_output(root: Path, env: dict[str, str], git: list[str], *args: str) -> 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source", type=Path, help="Root of a local Git working tree")
-    parser.add_argument("--limit", type=int, default=100, help="Maximum candidate commits")
+    parser.add_argument(
+        "--limit", type=int, default=100, help="Maximum candidate commits"
+    )
     args = parser.parse_args()
     if not 1 <= args.limit <= 200:
         parser.error("--limit must be between 1 and 200")
