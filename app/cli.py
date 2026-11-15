@@ -16,7 +16,6 @@ from app.service import RunRequest, RunService
 
 
 def run(argv: list[str]) -> int:
-    load_dotenv()
     parser = argparse.ArgumentParser(prog="security-agent")
     parser.add_argument("--version", action="version", version=__version__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -40,6 +39,10 @@ def run(argv: list[str]) -> int:
         "operation", choices=("list", "show"), default="list", nargs="?"
     )
     benchmarks.add_argument("benchmark_id", nargs="?")
+    vega = sub.add_parser(
+        "vega-p1z1", help="Run or package the standalone VEGA P1Z1 agent"
+    )
+    vega.add_argument("--package", type=Path, metavar="ZIP")
     ui = sub.add_parser("ui")
     ui.add_argument(
         "--host", choices=("127.0.0.1", "localhost", "0.0.0.0"), default="127.0.0.1"
@@ -47,6 +50,20 @@ def run(argv: list[str]) -> int:
     ui.add_argument("--port", type=int, default=8080)
     ui.add_argument("--runs-dir", type=Path, default=Path("runs"))
     args = parser.parse_args(argv)
+    if args.command == "vega-p1z1":
+        if args.package is not None:
+            from app.vega_p1z1.package import build_archive
+
+            try:
+                print(build_archive(args.package))
+                return 0
+            except (OSError, ValueError, SyntaxError):
+                print("Cannot build P1Z1 archive")
+                return 2
+        from app.vega_p1z1.agent import main as run_p1z1
+
+        return run_p1z1()
+    load_dotenv()
     if args.command == "benchmarks":
         try:
             registry = BenchmarkRegistry.load()

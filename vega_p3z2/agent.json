@@ -1,0 +1,7 @@
+{
+  "format": "vega-agent-harness",
+  "version": 1,
+  "entrypoint": "agent.py",
+  "strategy": "strategy.md",
+  "model_api": "vega-managed"
+}

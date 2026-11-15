@@ -321,7 +321,8 @@ URL, путь, shell-команда и scanner flags не могут прихо�
 
 Подробности: [устранение неполадок](docs/TROUBLESHOOTING.md),
 [реестр benchmark](docs/BENCHMARKS.md), [архитектура](docs/ARCHITECTURE.md),
-[VEGA adapter](docs/VEGA.md).
+[VEGA adapter](docs/VEGA.md), [VEGA P3Z2 agent](docs/VEGA_P3Z2.md),
+[VEGA P3Z3 agent](docs/VEGA_P3Z3.md).
 
 ## Модель безопасности и ограничения
 
@@ -338,3 +339,16 @@ URL, путь, shell-команда и scanner flags не могут прихо�
 
 Версия 0.4.1 остаётся локальной однопользовательской учебной платформой. Для
 production нужны отдельные auth, multi-user isolation, audit storage и deployment review.
+
+## VEGA P1Z1 submission
+
+The standalone file-inspection agent reads the VEGA environment, calls its model
+gateway, validates an exact source value and writes `flag.txt`:
+
+```powershell
+python -m app.main vega-p1z1
+python -m app.main vega-p1z1 --package dist/vega-p1z1.zip
+```
+
+The ZIP has exactly four root files and needs only Python and bash. Setup,
+limits and validation are described in [VEGA_P1Z1.md](docs/VEGA_P1Z1.md).

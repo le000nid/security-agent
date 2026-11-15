@@ -27,7 +27,12 @@ def _evidence(extra: dict) -> str:
     return str(message).strip()[:500] if message else "Semgrep rule matched"
 
 
-def run_semgrep(source: Path, output: Path) -> None:
+def run_semgrep(
+    source: Path, output: Path, *, extra_rules: Path | None = None, timeout: int = 900
+) -> None:
+    local_configs = ["--config", str(RULES)]
+    if extra_rules is not None:
+        local_configs.extend(("--config", str(extra_rules)))
     source = validate_source_path(str(source))
     executable = shutil.which("semgrep")
     if not executable:
@@ -42,8 +47,7 @@ def run_semgrep(source: Path, output: Path) -> None:
                 [
                     executable,
                     "scan",
-                    "--config",
-                    str(RULES),
+                    *local_configs,
                     "--json",
                     "--metrics=off",
                     "--disable-version-check",
@@ -54,7 +58,7 @@ def run_semgrep(source: Path, output: Path) -> None:
                 stdout=raw,
                 stderr=subprocess.PIPE,
                 text=True,
-                timeout=900,
+                timeout=timeout,
                 check=False,
                 env=scanner_environment(home),
             )
