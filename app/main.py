@@ -55,6 +55,7 @@ def run(argv: list[str] | None = None) -> int:
         "latest",
         "ui",
         "benchmarks",
+        "vega-p1z1",
         "--version",
         "--help",
         "-h",

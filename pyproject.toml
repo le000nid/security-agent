@@ -31,7 +31,7 @@ include = ["app*", "benchmark*"]
 "share/ai-security-agent/config/nuclei" = ["config/nuclei/*.yaml"]
 
 [tool.setuptools.package-data]
-app = ["ui/templates/*.html", "ui/static/*.css", "ui/static/*.js"]
+app = ["ui/templates/*.html", "ui/static/*.css", "ui/static/*.js", "vega_p1z1/run.sh", "vega_p1z1/agent.json", "vega_p1z1/strategy.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

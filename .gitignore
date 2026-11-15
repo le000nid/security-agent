@@ -18,3 +18,4 @@ logs/*
 reports/*
 !logs/.gitkeep
 !reports/.gitkeep
+/pytest-temp/

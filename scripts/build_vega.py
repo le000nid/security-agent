@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Build the isolated, secret-free VEGA adapter archive."""
+"""Build the isolated, secret-free VEGA adapter archives.
+
+Two profiles ship from the same contract (exactly four root files):
+
+- ``vega``  — bounded evidence agent (``vega/``)  -> dist/security-agent-vega.zip
+- ``p3z2``  — P3Z2 LFI filter-bypass agent (``vega_p3z2/``)
+              -> dist/security-agent-p3z2.zip
+"""
 
 from __future__ import annotations
 
@@ -12,18 +19,22 @@ REQUIRED = ("run.sh", "agent.json", "agent.py", "strategy.md")
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SOURCE_DIR = PROJECT_ROOT / "vega"
 OUTPUT = PROJECT_ROOT / "dist" / "security-agent-vega.zip"
+P3Z2_SOURCE_DIR = PROJECT_ROOT / "vega_p3z2"
+P3Z2_OUTPUT = PROJECT_ROOT / "dist" / "security-agent-p3z2.zip"
 
 
-def build(output: Path = OUTPUT) -> Path:
-    sources = {name: SOURCE_DIR / name for name in REQUIRED}
+def build(output: Path = OUTPUT, source_dir: Path = SOURCE_DIR) -> Path:
+    sources = {name: source_dir / name for name in REQUIRED}
     missing = [name for name, path in sources.items() if not path.is_file()]
     if missing:
-        raise FileNotFoundError("Missing VEGA files: " + ", ".join(missing))
+        raise FileNotFoundError(
+            f"Missing VEGA files in {source_dir.name}: " + ", ".join(missing)
+        )
 
     with sources["agent.json"].open(encoding="utf-8") as stream:
         manifest = json.load(stream)
     if not isinstance(manifest, dict):
-        raise ValueError("vega/agent.json must contain a JSON object")
+        raise ValueError(f"{source_dir.name}/agent.json must contain a JSON object")
 
     output.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -42,5 +53,14 @@ def build(output: Path = OUTPUT) -> Path:
     return output
 
 
+def build_p3z2(output: Path = P3Z2_OUTPUT) -> Path:
+    return build(output, P3Z2_SOURCE_DIR)
+
+
+def build_all() -> list[Path]:
+    return [build(), build_p3z2()]
+
+
 if __name__ == "__main__":
-    print(build())
+    for artifact in build_all():
+        print(artifact)
