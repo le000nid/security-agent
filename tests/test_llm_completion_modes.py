@@ -3,6 +3,7 @@
 import json
 from unittest.mock import Mock
 
+import httpx
 import pytest
 from test_llm_openai_compatible import (
     MODEL,
@@ -63,6 +64,7 @@ def test_chat_status_shows_resolved_auto_model(monkeypatch, configured):
         "provider": "openai_compatible",
         "model": "resolved-flash-model",
     }
+    resolved.complete_text.return_value = "OK"
     llm = ChatLLM(factory=Mock(return_value=resolved))
 
     status = llm.check()
@@ -70,6 +72,87 @@ def test_chat_status_shows_resolved_auto_model(monkeypatch, configured):
     assert status["connectivity"] == "available"
     assert status["configured_model"] == "auto"
     assert status["model"] == "resolved-flash-model"
+
+
+@pytest.mark.parametrize(
+    ("status_code", "expected_code"),
+    [
+        (401, "authentication_failed"),
+        (403, "access_denied"),
+        (404, "endpoint_invalid"),
+        (429, "rate_limited"),
+        (500, "provider_unreachable"),
+    ],
+)
+def test_connection_check_reports_chat_failure_code(
+    monkeypatch, configured, status_code, expected_code
+):
+    stub, _ = install_stub(
+        monkeypatch,
+        [response(payload=models_payload(MODEL)), response(status_code)],
+    )
+    status = ChatLLM(factory=OpenAICompatibleClient).check()
+    assert status["connectivity"] == "unavailable"
+    assert status["error_code"] == expected_code
+    assert status["error_message"]
+    assert "runtime-secret" not in json.dumps(status)
+    assert len(stub.calls) == 2
+
+
+def test_connection_check_rejects_html_200(monkeypatch, configured):
+    install_stub(
+        monkeypatch,
+        [
+            response(payload=models_payload(MODEL)),
+            response(content=b"<html>login</html>"),
+        ],
+    )
+    status = ChatLLM(factory=OpenAICompatibleClient).check()
+    assert status["connectivity"] == "unavailable"
+    assert status["error_code"] == "response_invalid"
+
+
+def test_failed_auto_probe_still_shows_resolved_model(monkeypatch, configured):
+    monkeypatch.setenv("LLM_MODEL", "auto")
+    install_stub(
+        monkeypatch,
+        [
+            response(payload=models_payload("embedding-v1", "chat-flash-v1")),
+            response(401),
+        ],
+    )
+    status = ChatLLM(factory=OpenAICompatibleClient).check()
+    assert status["configured_model"] == "auto"
+    assert status["model"] == "chat-flash-v1"
+    assert status["error_code"] == "authentication_failed"
+
+
+def test_connection_check_rejects_timeout(monkeypatch, configured):
+    timeout = httpx.ReadTimeout(
+        "timeout", request=httpx.Request("POST", "https://example.test")
+    )
+    stub, _ = install_stub(
+        monkeypatch, [response(payload=models_payload(MODEL)), timeout]
+    )
+    status = ChatLLM(factory=OpenAICompatibleClient).check()
+    assert status["error_code"] == "provider_unreachable"
+    assert len(stub.calls) == 2
+
+
+def test_connection_check_requires_complete_nonempty_text(monkeypatch, configured):
+    for content, finish_reason, expected_code in (
+        ("", "stop", "response_invalid"),
+        ("partial", "length", "response_truncated"),
+    ):
+        install_stub(
+            monkeypatch,
+            [
+                response(payload=models_payload(MODEL)),
+                response(payload=envelope(content, finish_reason)),
+            ],
+        )
+        status = ChatLLM(factory=OpenAICompatibleClient).check()
+        assert status["error_code"] == expected_code
 
 
 def test_complete_text_omits_response_format_and_keeps_only_content(

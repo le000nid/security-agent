@@ -218,15 +218,37 @@ LLM необязательна. Заполните локальный `.env`:
 ```dotenv
 LLM_PROVIDER=openai_compatible
 LLM_BASE_URL=https://your-approved-provider.example/api
-LLM_MODEL=exact-model-id
+LLM_MODEL=auto
+LLM_MODEL_POLICY=fast
 LLM_API_KEY=replace_me
 ```
+
+`LLM_MODEL=auto` выбирает доступную chat-модель по `/models`: `fast` предпочитает
+`flash`, затем `mini`, затем `turbo`; `quality` предпочитает модели без `flash`
+и `mini`. Список сортируется, поэтому выбор повторяем. Embedding, audio и rerank
+модели исключаются. Можно указать точный ID вместо `auto` — он должен быть в
+списке `/models`. Базовый URL должен заканчиваться на корне API, например `/api`,
+без `/models` или `/chat/completions`.
 
 Не коммитьте `.env`. Проверка подключения выполняется только явно:
 
 ```powershell
 .\run.ps1 doctor --check-llm
 ```
+
+В UI кнопка «Проверить LLM» проверяет и `/models`, и короткий текстовый ответ
+`/chat/completions`. Статус показывает выбранный ID модели. При отказе он
+показывает безопасный код и пояснение без ключа, тела ответа или reasoning.
+Коды различают `authentication_failed` (401), `access_denied` (403),
+`model_unavailable`, `endpoint_invalid`, `provider_unreachable` (включая timeout
+и 5xx), `response_invalid`, `response_truncated`, `rate_limited` (429) и
+`configuration_missing`.
+
+Если LLM не подключается, сначала проверьте URL и выбранный ID модели, затем
+перезапустите UI через `.\run.ps1 ui`, чтобы Compose применил изменённый `.env`.
+Локальная проверка Windows не доказывает, что контейнер получил те же переменные
+или имеет доступ к API. Если `/models` возвращает 200 с HTML, это неверный URL
+или промежуточная страница; такой ответ не считается успешным.
 
 Бюджеты задаются переменными `LLM_PLANNER_*`, `LLM_ENRICHMENT_*`,
 `LLM_BRIEF_*` и `LLM_CHAT_*` из `.env.example`. Defaults: Planner `320/512`,
@@ -320,8 +342,7 @@ URL, путь, shell-команда и scanner flags не могут прихо�
 | MongoDB benchmark не готов | проверьте профиль `nosqli-mongo`, Mongo health и API logs |
 
 Подробности: [устранение неполадок](docs/TROUBLESHOOTING.md),
-[реестр benchmark](docs/BENCHMARKS.md), [архитектура](docs/ARCHITECTURE.md),
-[VEGA adapter](docs/VEGA.md).
+[реестр benchmark](docs/BENCHMARKS.md), [архитектура](docs/ARCHITECTURE.md).
 
 ## Модель безопасности и ограничения
 

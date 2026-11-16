@@ -48,9 +48,14 @@ docker compose --profile agent run --rm --no-deps --entrypoint nuclei agent -val
 
 | Симптом | Решение |
 | --- | --- |
-| Chat показывает `unchecked` | нажмите «Проверить подключение» или выполните `doctor --check-llm` |
-| HTTP 401/403 | проверьте локальный API key и разрешения модели; не печатайте key |
-| Model unavailable | укажите точный model ID из разрешённого provider |
+| Chat показывает `unchecked` | нажмите «Проверить подключение» или выполните `doctor --check-llm`; проверяются `/models` и короткий ответ chat completion |
+| `authentication_failed` / `access_denied` | проверьте локальный API key и разрешения модели; не печатайте key |
+| `model_unavailable` | проверьте точный ID или используйте `LLM_MODEL=auto` и `LLM_MODEL_POLICY=fast`/`quality`; embedding/audio/rerank модели не выбираются |
+| `endpoint_invalid` | укажите HTTPS API base без `/models` и `/chat/completions`; HTTP 200 с HTML не считается успешным |
+| `provider_unreachable` | проверьте DNS, TLS, доступ контейнера к провайдеру и его состояние; сюда относятся timeout и 5xx |
+| `rate_limited` | провайдер ответил HTTP 429; повторите позже |
+| `response_invalid` / `response_truncated` | провайдер вернул неправильный, пустой или незавершённый chat-ответ; проверьте совместимость модели и бюджет |
+| `configuration_missing` | проверьте `LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_MODEL` и `LLM_API_KEY` в локальном `.env` |
 | `brief_response_truncated` | Brief делает один содержательный retry с увеличенным бюджетом; смотрите safe attempts в summary |
 | `brief_schema_validation_error` | выполняется один terminal schema repair; смотрите `{field,type}` |
 | `chat_response_truncated` | полезная часть остаётся в UI с follow-up actions |
@@ -59,6 +64,10 @@ docker compose --profile agent run --rm --no-deps --entrypoint nuclei agent -val
 AI Brief выполняет не более трёх логических попыток. Chat Analyst — не более двух.
 Transport retries также ограничены. Raw model response, reasoning, API key и
 ValidationError input не сохраняются.
+
+`doctor --check-llm` проверяет подключение в том окружении, где выполняется.
+Успех на Windows-хосте не подтверждает доступ из Docker; после изменения `.env`
+перезапустите UI через `run.ps1 ui` и проверьте статус там.
 
 ## Отчёты и состояния
 

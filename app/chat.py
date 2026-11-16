@@ -14,7 +14,7 @@ from app.benchmarks import BenchmarkId, BenchmarkRegistry, Mode
 from app.chat_analysis import analyze
 from app.config import Settings
 from app.jobs import JobManager
-from app.llm import OpenAICompatibleClient
+from app.llm import LLMProviderError, OpenAICompatibleClient
 from app.llm_output import ChatResponseTruncated, LLMError, validate_output
 from app.repository import RunId, RunRepository
 from app.safe_logging import redact, redact_data
@@ -45,6 +45,35 @@ ANALYTICAL = {
     Intent.EXPLAIN_FINDING,
     Intent.SUMMARIZE_RUN,
 }
+
+LLM_DIAGNOSTICS = {
+    "authentication_failed": "Ключ отклонён провайдером (HTTP 401).",
+    "access_denied": "Доступ к модели запрещён (HTTP 403).",
+    "model_unavailable": "Запрошенная chat-модель недоступна.",
+    "endpoint_invalid": "Проверьте базовый URL API без /models и /chat/completions.",
+    "provider_unreachable": "Не удалось связаться с провайдером.",
+    "response_invalid": "Провайдер вернул ответ вне формата API.",
+    "response_truncated": "Проверочный ответ модели был обрезан.",
+    "rate_limited": "Провайдер ограничил частоту запросов (HTTP 429).",
+    "configuration_missing": "Проверьте настройки провайдера, модели и ключа.",
+    "request_invalid": "Провайдер отклонил параметры запроса.",
+    "internal_error": "Внутренняя ошибка проверки подключения.",
+}
+
+
+def _provider_code(exc: LLMError) -> str:
+    kind = exc.code
+    for role in ("chat_analysis", "enrichment", "planner", "brief", "chat"):
+        if kind.startswith(role + "_"):
+            kind = kind.removeprefix(role + "_")
+            break
+    return {
+        "timeout": "provider_unreachable",
+        "http_error": "provider_unreachable",
+        "empty_content": "response_invalid",
+        "schema_validation_error": "response_invalid",
+        "json_decode_error": "response_invalid",
+    }.get(kind, kind if kind in LLM_DIAGNOSTICS else "response_invalid")
 
 
 class ChatIntent(BaseModel):
@@ -91,6 +120,8 @@ class ChatLLM:
         self.factory = factory or OpenAICompatibleClient
         self.client = None
         self.connectivity = "unchecked"
+        self.diagnostic_code: str | None = None
+        self.resolved_model: str | None = None
         self._lock = Lock()
 
     def status(self) -> dict:
@@ -109,11 +140,14 @@ class ChatLLM:
                 ),
                 "model": redact(
                     (metadata or {}).get("model")
+                    or self.resolved_model
                     or settings.llm_model
                     or "не настроена"
                 ),
                 "configured_model": redact(settings.llm_model or "не настроена"),
                 "connectivity": self.connectivity,
+                "error_code": self.diagnostic_code,
+                "error_message": LLM_DIAGNOSTICS.get(self.diagnostic_code),
             }
         except ValueError:
             return {
@@ -121,18 +155,51 @@ class ChatLLM:
                 "model": "",
                 "configured_model": "",
                 "connectivity": "unavailable",
+                "error_code": "configuration_missing",
+                "error_message": LLM_DIAGNOSTICS["configuration_missing"],
             }
 
     def check(self) -> dict:
         if not self._lock.acquire(blocking=False):
             raise ValueError("llm_busy")
         try:
+            self.resolved_model = None
             self.client = self.factory(settings=Settings.from_env())
             self.client.ensure_model_available()
+            selected = getattr(self.client, "model", None)
+            if isinstance(selected, str):
+                self.resolved_model = selected
+            probe = self.client.complete_text(
+                "This is a connection check. Reply briefly in plain text.",
+                "Confirm the connection.",
+                max_tokens=512,
+                role="chat_analysis",
+            )
+            if not isinstance(probe, str) or not probe.strip():
+                raise LLMProviderError("response_invalid", "Empty model probe")
+            metadata = getattr(self.client, "last_response_meta", None)
+            if isinstance(metadata, dict) and metadata.get("chat_analysis", {}).get(
+                "truncated"
+            ):
+                raise LLMProviderError("response_truncated", "Truncated model probe")
             self.connectivity = "available"
+            self.diagnostic_code = None
+        except LLMProviderError as exc:
+            self.client = None
+            self.connectivity = "unavailable"
+            self.diagnostic_code = exc.code
+        except LLMError as exc:
+            self.client = None
+            self.connectivity = "unavailable"
+            self.diagnostic_code = _provider_code(exc)
+        except ValueError:
+            self.client = None
+            self.connectivity = "unavailable"
+            self.diagnostic_code = "configuration_missing"
         except Exception:
             self.client = None
             self.connectivity = "unavailable"
+            self.diagnostic_code = "internal_error"
         finally:
             self._lock.release()
         return self.status()
@@ -171,8 +238,19 @@ class ChatLLM:
             kind = exc.code.removeprefix(role + "_")
             if role == "chat_analysis" and kind == "response_truncated":
                 raise ChatResponseTruncated() from None
-            if kind in {"timeout", "http_error", "rate_limited", "model_unavailable"}:
+            if kind in {
+                "timeout",
+                "http_error",
+                "rate_limited",
+                "model_unavailable",
+                "authentication_failed",
+                "access_denied",
+                "endpoint_invalid",
+                "provider_unreachable",
+                "request_invalid",
+            }:
                 self.connectivity = "unavailable"
+                self.diagnostic_code = _provider_code(exc)
                 raise ValueError("llm_unavailable") from None
             code = {
                 "response_truncated": "chat_response_truncated",
@@ -180,9 +258,14 @@ class ChatLLM:
                 "empty_content": "chat_json_invalid",
             }.get(kind, "chat_schema_invalid")
             raise ValueError(code) from None
-        except ValueError:
+        except ValueError as exc:
             # The client can raise ValueError for model discovery/configuration.
             self.connectivity = "unavailable"
+            self.diagnostic_code = (
+                exc.code
+                if isinstance(exc, LLMProviderError)
+                else "configuration_missing"
+            )
             raise ValueError("llm_unavailable") from None
         except Exception:
             # Do not expose exception text or mistake an internal bug for an outage.

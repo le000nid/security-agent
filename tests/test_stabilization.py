@@ -136,7 +136,7 @@ def test_planner_safe_parse_diagnostics(content, kind):
 @pytest.mark.parametrize(
     "outcome,kind",
     [
-        (httpx.Response(401), "http_error"),
+        (httpx.Response(401), "authentication_failed"),
         (httpx.Response(429), "rate_limited"),
         (httpx.ReadTimeout("SECRET-KEY"), "timeout"),
         (chat(None), "empty_content"),

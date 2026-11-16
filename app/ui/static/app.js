@@ -133,7 +133,8 @@ async function loadBenchmarks() {
   selectBenchmark();
 }
 function displayLLM(data) {
-  $("llm-status").textContent = "Подключение чата к LLM: " + status(data.connectivity) + " · " + data.provider + " / " + data.model;
+  const detail = data.error_message ? " · " + data.error_message : "";
+  $("llm-status").textContent = "Подключение чата к LLM: " + status(data.connectivity) + " · " + data.provider + " / " + data.model + detail;
 }
 $("check-llm").onclick = async () => {
   $("check-llm").disabled = true;
@@ -232,7 +233,7 @@ async function openRun(id) {
     row.append(node("h3", entry.step + ". " + (actions[entry.action] || entry.action)),
       node("p", decisionSources[entry.decision_source] || "Источник решения не указан"),
       node("p", status(entry.status) + " · добавлено находок: " + entry.findings_added));
-    // Raw model reasoning is available in the downloadable trace; primary labels stay Russian.
+    // The trace contains safe decision metadata; raw model reasoning is not stored.
     if (entry.error_code) row.append(node("p", errorText(entry.error_code)));
     $("trace").append(row);
   }

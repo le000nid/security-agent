@@ -7,7 +7,13 @@ from pydantic import ValidationError
 
 from app import main
 from app.config import Settings
-from app.llm import SYSTEM_PROMPT, Enrichment, OpenAICompatibleClient, enrich_findings
+from app.llm import (
+    SYSTEM_PROMPT,
+    Enrichment,
+    LLMProviderError,
+    OpenAICompatibleClient,
+    enrich_findings,
+)
 from app.models import Finding
 
 MODEL = "deepseek-ai/DeepSeek-V4-Flash-0731"
@@ -190,6 +196,17 @@ def test_auto_excludes_unsuitable_models_when_chat_model_exists(
     assert client.model == "chat-v1"
 
 
+def test_auto_rejects_discovery_with_only_non_chat_models(monkeypatch, configured):
+    monkeypatch.setenv("LLM_MODEL", "auto")
+    install_stub(
+        monkeypatch,
+        [response(payload=models_payload("embedding-large", "audio-v1"))],
+    )
+    with pytest.raises(LLMProviderError) as caught:
+        OpenAICompatibleClient(sleeper=lambda _: None).ensure_model_available()
+    assert caught.value.code == "model_unavailable"
+
+
 @pytest.mark.parametrize(
     ("policy", "models", "expected"),
     [
@@ -239,8 +256,11 @@ def test_invalid_model_discovery_json(monkeypatch, configured, payload):
     )
     install_stub(monkeypatch, [outcome])
     client = OpenAICompatibleClient(sleeper=lambda _: None)
-    with pytest.raises(ValueError, match="Invalid OpenAI-compatible model discovery"):
+    with pytest.raises(LLMProviderError) as caught:
         client.ensure_model_available()
+    assert caught.value.code == (
+        "endpoint_invalid" if payload is None else "response_invalid"
+    )
 
 
 @pytest.mark.parametrize(
@@ -449,7 +469,7 @@ def test_chat_timeout_is_retried(monkeypatch, configured, finding, enrichment_pa
     ("outcomes", "message"),
     [
         ([response(429)] * 3, "rate limited"),
-        ([response(500)] * 3, "http error"),
+        ([response(500)] * 3, "provider unreachable"),
     ],
 )
 def test_chat_transient_failure_stops_after_two_retries(
@@ -497,7 +517,7 @@ def test_malformed_chat_json_is_not_retried(monkeypatch, configured, finding):
         monkeypatch,
         [response(payload=models_payload(MODEL)), response(content=b"not-json")],
     )
-    with pytest.raises(ValueError, match="schema validation"):
+    with pytest.raises(ValueError, match="response invalid"):
         OpenAICompatibleClient(sleeper=lambda _: None).enrich(finding)
     assert len(stub.calls) == 2
 

@@ -14,6 +14,16 @@ from app.models import Finding, NormalizedCategory, Severity
 from app.safe_logging import redact
 
 MAX_RETRIES = 2
+
+
+class LLMProviderError(ValueError):
+    """Safe provider diagnostic without response bodies or credentials."""
+
+    def __init__(self, code: str, message: str):
+        self.code = code
+        super().__init__(message)
+
+
 SYSTEM_PROMPT = (
     "You are a defensive assistant analyzing one finding already produced by a trusted "
     "SAST or DAST scanner. Analyze only the supplied finding. Never invent, add, or "
@@ -186,15 +196,20 @@ def _validate_base_url(value: str) -> str:
         parsed = urlsplit(candidate)
         port = parsed.port
     except ValueError as exc:
-        raise ValueError(f"Invalid LLM_BASE_URL: {exc}") from exc
+        raise LLMProviderError("endpoint_invalid", "Invalid LLM_BASE_URL") from exc
     if parsed.scheme != "https" or not parsed.hostname:
-        raise ValueError("LLM_BASE_URL must be an absolute HTTPS URL")
+        raise LLMProviderError(
+            "endpoint_invalid", "LLM_BASE_URL must be an absolute HTTPS URL"
+        )
     if parsed.username or parsed.password or parsed.query or parsed.fragment:
-        raise ValueError(
-            "LLM_BASE_URL must not contain credentials, query, or fragment"
+        raise LLMProviderError(
+            "endpoint_invalid",
+            "LLM_BASE_URL must not contain credentials, query, or fragment",
         )
     if parsed.path.rstrip("/").endswith(("/chat/completions", "/models")):
-        raise ValueError("LLM_BASE_URL must be the API base, not an endpoint URL")
+        raise LLMProviderError(
+            "endpoint_invalid", "LLM_BASE_URL must be the API base, not an endpoint URL"
+        )
     netloc = parsed.hostname.lower()
     if port is not None:
         netloc += f":{port}"
@@ -213,13 +228,19 @@ class OpenAICompatibleClient:
         settings = settings or Settings.from_env()
         self.settings = settings
         if settings.llm_provider.lower() != "openai_compatible":
-            raise ValueError("Set LLM_PROVIDER=openai_compatible or use --no-llm")
+            raise LLMProviderError(
+                "configuration_missing",
+                "Set LLM_PROVIDER=openai_compatible or use --no-llm",
+            )
         self.provider = "openai_compatible"
         self.base_url = _validate_base_url(settings.llm_base_url)
         self.model = settings.llm_model.strip()
         self._key = settings.llm_api_key.get_secret_value()
         if not self.model or not self._key:
-            raise ValueError("LLM_MODEL and LLM_API_KEY are required unless --no-llm")
+            raise LLMProviderError(
+                "configuration_missing",
+                "LLM_MODEL and LLM_API_KEY are required unless --no-llm",
+            )
         self.models_url = f"{self.base_url}/models"
         self.chat_url = f"{self.base_url}/chat/completions"
         self._sleeper = sleeper
@@ -315,7 +336,20 @@ class OpenAICompatibleClient:
         else:
             detail = messages.get(status, f"HTTP {status}")
         context = "Model discovery" if discovery else "LLM completion"
-        raise ValueError(f"{context} failed: {detail}")
+        code = (
+            "authentication_failed"
+            if status == 401
+            else "access_denied"
+            if status == 403
+            else "endpoint_invalid"
+            if status == 404
+            else "rate_limited"
+            if status == 429
+            else "provider_unreachable"
+            if status >= 500
+            else "request_invalid"
+        )
+        raise LLMProviderError(code, f"{context} failed: {detail}")
 
     def _select_model(self, models: tuple[str, ...]) -> str:
         unsuitable = ("embedding", "embed", "rerank", "audio", "whisper", "tts")
@@ -324,9 +358,12 @@ class OpenAICompatibleClient:
             for model in models
             if not any(marker in model.casefold() for marker in unsuitable)
         )
-        candidates = suitable or models
+        candidates = suitable
         if not candidates:
-            raise ValueError("No models available from the configured provider")
+            raise LLMProviderError(
+                "model_unavailable",
+                "No chat models available from the configured provider",
+            )
 
         if self.settings.llm_model_policy == "fast":
             for marker in ("flash", "mini", "turbo"):
@@ -356,27 +393,34 @@ class OpenAICompatibleClient:
             return
         response = self._request("GET", self.models_url)
         self._raise_status(response, discovery=True)
+        if "json" not in response.headers.get("content-type", "").casefold():
+            raise LLMProviderError(
+                "endpoint_invalid", "Model discovery returned non-JSON content"
+            )
         try:
             payload = response.json()
             data = payload["data"]
         except (ValueError, KeyError, TypeError) as exc:
-            raise ValueError(
-                "Invalid OpenAI-compatible model discovery response"
+            raise LLMProviderError(
+                "response_invalid", "Invalid OpenAI-compatible model discovery response"
             ) from exc
         if not isinstance(data, list) or any(
             not isinstance(item, dict) or not isinstance(item.get("id"), str)
             for item in data
         ):
-            raise ValueError("Invalid OpenAI-compatible model discovery response")
+            raise LLMProviderError(
+                "response_invalid", "Invalid OpenAI-compatible model discovery response"
+            )
         self.available_model_ids = tuple(sorted({item["id"] for item in data}))
         if self.model.casefold() == "auto":
             self.model = self._select_model(self.available_model_ids)
         elif self.model not in self.available_model_ids:
             preview = ", ".join(self.available_model_ids[:10]) or "none"
-            raise ValueError(
+            raise LLMProviderError(
+                "model_unavailable",
                 redact(
                     f"Configured model unavailable: {self.model}. Available model IDs: {preview}"
-                )
+                ),
             )
         self._model_available = True
 
@@ -429,9 +473,22 @@ class OpenAICompatibleClient:
             request_body["response_format"] = {"type": "json_object"}
         response = self._request("POST", self.chat_url, payload=request_body, role=role)
         if not 200 <= response.status_code < 300:
-            raise LLMError(
-                role, "rate_limited" if response.status_code == 429 else "http_error"
+            code = (
+                "authentication_failed"
+                if response.status_code == 401
+                else "access_denied"
+                if response.status_code == 403
+                else "endpoint_invalid"
+                if response.status_code == 404
+                else "rate_limited"
+                if response.status_code == 429
+                else "provider_unreachable"
+                if response.status_code >= 500
+                else "request_invalid"
             )
+            raise LLMError(role, code)
+        if "json" not in response.headers.get("content-type", "").casefold():
+            raise LLMError(role, "response_invalid")
         try:
             payload = response.json()
             choice = payload["choices"][0]

@@ -1,4 +1,4 @@
-"""Container diagnostics; model discovery only when explicitly requested."""
+"""Container diagnostics; LLM probe only when explicitly requested."""
 
 import os
 import platform
@@ -9,8 +9,7 @@ from tempfile import TemporaryDirectory
 
 from app import __version__
 from app.benchmarks import BenchmarkRegistry
-from app.config import Settings
-from app.llm import OpenAICompatibleClient
+from app.chat import ChatLLM
 from app.preflight import check_target_reachable
 from app.resources import config_directory
 from app.scanner_env import scanner_environment
@@ -84,14 +83,10 @@ def diagnose(*, check_llm: bool = False, check_benchmarks: bool = False) -> int:
         + ("missing " + ", ".join(missing) if missing else "present (values hidden)")
     )
     if check_llm:
-        try:
-            OpenAICompatibleClient(
-                settings=Settings.from_env()
-            ).ensure_model_available()
-            print("OK model discovery (no completion)")
-        except ValueError:
-            print(
-                "FAIL model discovery; check configuration, authentication and model ID"
-            )
+        status = ChatLLM().check()
+        if status["connectivity"] == "available":
+            print(f"OK LLM chat completion; model: {status['model']}")
+        else:
+            print(f"FAIL LLM check: {status['error_code']}")
             failed = True
     return 6 if failed else 0
