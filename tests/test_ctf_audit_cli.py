@@ -17,7 +17,7 @@ def test_project_cli_runs_audit_without_dotenv_or_model(
     def open_with_default(
         path, mode="r", buffering=-1, encoding=None, errors=None, newline=None
     ):
-        if "b" not in mode and encoding is None:
+        if "b" not in mode and encoding in (None, "locale"):
             encoding = default_encoding
         return native_open(path, mode, buffering, encoding, errors, newline)
 
