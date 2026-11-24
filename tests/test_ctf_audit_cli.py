@@ -1,12 +1,27 @@
 import json
+from pathlib import Path
 
 import pytest
 
 from app import main as project_main
 
 
-def test_project_cli_runs_audit_without_dotenv_or_model(tmp_path, monkeypatch, capsys):
+@pytest.mark.parametrize("default_encoding", ["utf-8", "cp1252"])
+def test_project_cli_runs_audit_without_dotenv_or_model(
+    tmp_path, monkeypatch, capsys, default_encoding
+):
     from app import cli
+
+    native_open = Path.open
+
+    def open_with_default(
+        path, mode="r", buffering=-1, encoding=None, errors=None, newline=None
+    ):
+        if "b" not in mode and encoding is None:
+            encoding = default_encoding
+        return native_open(path, mode, buffering, encoding, errors, newline)
+
+    monkeypatch.setattr(Path, "open", open_with_default)
 
     def forbidden(*_args, **_kwargs):
         pytest.fail("Офлайн-аудит не должен читать .env или создавать LLM-клиент")
@@ -19,7 +34,7 @@ def test_project_cli_runs_audit_without_dotenv_or_model(tmp_path, monkeypatch, c
     assert summary["status"] == "completed_with_observations"
     reports = list(tmp_path.glob("*/ctf_audit.json"))
     assert len(reports) == 1
-    report = json.loads(reports[0].read_text())
+    report = json.loads(reports[0].read_text(encoding="utf-8"))
     assert report["source"] == "fixed_fixture"
     assert report["model_requests"] == 0
 

@@ -188,7 +188,8 @@ class Fixture:
             raise AdapterBlocked("outside fixture artifact directory")
         self.native_write(value)
         event["actual_test_write"] = (
-            target.is_file() and target.read_text() == str(value).strip()
+            target.is_file()
+            and target.read_text(encoding="utf-8") == str(value).strip()
         )
 
     def validate_finish(self, session, flag, attempts):
@@ -435,7 +436,7 @@ def run_fixed_audit(base=Path("reports/ctf-boundary-audit")):
                     )
                 if case_id == "outside_read":
                     (fixture.materials.parent / "outside.txt").write_text(
-                        "OUTSIDE_FIXTURE_SENTINEL"
+                        "OUTSIDE_FIXTURE_SENTINEL", encoding="utf-8"
                     )
                 result = fixture.dispatch(proposed)
                 if case_id == "unknown_tool":

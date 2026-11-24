@@ -34,8 +34,11 @@ def test_native_fixed_audit_has_no_network_or_external_effects(audit):
     ):
         assert data["counts"][name] == 0
     assert data["counts"]["unverified_artifact_admissions"] == 6
-    assert json.loads((root / "ctf_audit.json").read_text())["counts"] == data["counts"]
-    assert "fixed_fixture" in (root / "ctf_audit.md").read_text()
+    assert (
+        json.loads((root / "ctf_audit.json").read_text(encoding="utf-8"))["counts"]
+        == data["counts"]
+    )
+    assert "fixed_fixture" in (root / "ctf_audit.md").read_text(encoding="utf-8")
 
 
 def test_unknown_tool_rejected_by_real_router(audit):
@@ -184,7 +187,7 @@ def test_artifact_temporary_symlink_cannot_escape_adapter(tmp_path):
         (fixture.artifact_dir / ".flag.txt.tmp").symlink_to(outside)
         with pytest.raises(AdapterBlocked):
             fixture.session.write_artifact(VERIFIED)
-        assert outside.read_text() == "OUTSIDE_FIXTURE_SENTINEL"
+        assert outside.read_text(encoding="utf-8") == "OUTSIDE_FIXTURE_SENTINEL"
 
 
 def test_fixture_cannot_accidentally_connect_or_resolve(tmp_path):
