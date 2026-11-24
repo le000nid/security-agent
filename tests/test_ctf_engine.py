@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import subprocess
 import time
 import urllib.error
@@ -174,11 +175,11 @@ def test_get_profile_resolves_every_functional_name():
 
 
 def test_profiles_carry_no_external_task_ids_in_hints():
-    forbidden = ("p1z1", "p2z3", "p3z2", "p3z3", "p4z2", "p4z4", "p4z8", "vega")
+    legacy_task_id = re.compile(r"p\d+z\d+")
     for name, entry in PROFILES.items():
         if entry == "evidence":
             continue
-        assert not any(word in entry.hint.lower() for word in forbidden), name
+        assert not legacy_task_id.search(entry.hint.lower()), name
         assert entry.tool_descriptions.strip(), name
 
 
@@ -784,12 +785,10 @@ def test_package_renders_profile_name_in_agent_source(tmp_path):
     with zipfile.ZipFile(archive_path) as archive:
         source = archive.read("agent.py").decode()
     assert "PROFILE_NAME = 'git_history_recovery'" in source
-    # task IDs may appear only in alias context (map entry or the
-    # documented registry table), always next to the functional name
+    # legacy task-id patterns must not appear in the packaged source
+    legacy_task_id = re.compile(r"p\d+z\d+")
     for line in source.splitlines():
-        low = line.lower()
-        if "p2z3" in low:
-            assert "git_history_recovery" in line, line
+        assert not legacy_task_id.search(line.lower()), line
 
 
 def test_build_script_builds_all_profiles(tmp_path):

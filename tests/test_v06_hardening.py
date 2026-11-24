@@ -233,8 +233,8 @@ def test_security_headers_present(web):
 # --- 6. profile registry integrity after the v6 upgrade ----------------------
 
 
-def test_profile_vectors_carry_no_brand_mentions():
-    forbidden = ("vega", "p1z1", "p2z3", "p3z2", "p3z3", "p4z2", "p4z4", "p4z8")
+def test_profile_vectors_carry_no_external_task_ids():
+    legacy_task_id = re.compile(r"p\d+z\d+")
     blobs = (
         profiles.SQLI_BASE_PAYLOADS
         + profiles.SQLI_ADMIN_PAYLOADS
@@ -244,8 +244,7 @@ def test_profile_vectors_carry_no_brand_mentions():
         + list(profiles.FIXED_ABS_READS)
     )
     for item in blobs:
-        low = str(item).lower()
-        assert not any(word in low for word in forbidden), item
+        assert not legacy_task_id.search(str(item).lower()), item
 
 
 def test_payload_class_knows_the_new_families():

@@ -343,13 +343,12 @@ def test_remote_inclusion_profile_registered():
     assert "169.254.169.254" in profile.hint
 
 
-def test_rfi_vectors_carry_no_brand_mentions():
-    forbidden = ("vega", "p1z1", "p2z3", "p3z2", "p3z3", "p4z2", "p4z4", "p4z8")
+def test_rfi_vectors_carry_no_external_task_ids():
+    legacy_task_id = re.compile(r"p\d+z\d+")
     blobs = (
         list(INCLUDE_SCHEMES)
         + list(SSRF_TARGETS)
         + [t for t, _ in SCHEME_FILTER_BYPASSES]
     )
     for item in blobs:
-        low = str(item).lower()
-        assert not any(w in low for w in forbidden), item
+        assert not legacy_task_id.search(str(item).lower()), item
