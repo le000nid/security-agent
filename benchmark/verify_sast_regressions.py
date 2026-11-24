@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import time
 from collections import Counter
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -107,6 +108,18 @@ def check_variants(targets: Path, output: Path, name, count, verifier):
     }
 
 
+def _replace_report(temporary: Path, destination: Path) -> None:
+    for attempt in range(4):
+        try:
+            temporary.replace(destination)
+            return
+        except PermissionError as exc:
+            if attempt == 3 or getattr(exc, "winerror", None) not in {5, 32, 33}:
+                raise
+            # Windows readers can briefly block an otherwise valid rename.
+            time.sleep(0.05 * 2**attempt)
+
+
 def save_report(output: Path, report):
     temporary = None
     try:
@@ -120,7 +133,7 @@ def save_report(output: Path, report):
         ) as stream:
             temporary = Path(stream.name)
             json.dump(report, stream, ensure_ascii=False, indent=2)
-        temporary.replace(output / "summary.json")
+        _replace_report(temporary, output / "summary.json")
     finally:
         if temporary is not None:
             temporary.unlink(missing_ok=True)

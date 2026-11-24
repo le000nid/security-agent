@@ -20,17 +20,18 @@ dependencies = [
 
 [project.scripts]
 security-agent = "app.main:main"
+security-agent-history-audit = "app.git_history_audit:main"
 
 [tool.setuptools.packages.find]
 include = ["app*", "benchmark*"]
 
 [tool.setuptools.data-files]
-"share/ai-security-agent/config" = ["config/semgrep.yaml", "config/benchmarks.yaml", "config/nosqli-scenarios.json", "config/nosqli-profiles.yaml", "config/nosqli-sast-cases.json"]
+"share/ai-security-agent/config" = ["config/semgrep.yaml", "config/semgrep-vega-p2.yaml", "config/benchmarks.yaml", "config/nosqli-scenarios.json", "config/nosqli-profiles.yaml", "config/nosqli-sast-cases.json"]
 "share/ai-security-agent/config/expected" = ["config/expected/*.json"]
 "share/ai-security-agent/config/nuclei" = ["config/nuclei/*.yaml"]
 
 [tool.setuptools.package-data]
-app = ["ui/templates/*.html", "ui/static/*.css", "ui/static/*.js"]
+app = ["ui/templates/*.html", "ui/static/*.css", "ui/static/*.js", "vega_p1z1/run.sh", "vega_p1z1/agent.json", "vega_p1z1/strategy.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

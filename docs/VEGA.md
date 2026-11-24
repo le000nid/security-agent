@@ -4,6 +4,13 @@
 тестовой системы VEGA. Он не меняет SAST/DAST pipeline, benchmark или правила
 основного приложения.
 
+Для поколений P2Z («Проект помнит прошлое» P2Z3) и P3Z («Фильтр для
+галочки» P3Z2, «Доверяй, но пересчитывай» P3Z3) есть автономные экспорты
+`vega_p2z3/`, `vega_p3z2/` и `vega_p3z3/` —
+см. [VEGA P2Z3 agent](VEGA_P2Z3.md), [VEGA P3Z2 agent](VEGA_P3Z2.md) и
+[VEGA P3Z3 agent](VEGA_P3Z3.md); все сборки строятся через
+`python scripts/build_vega.py`.
+
 Архитектура сохраняет основной принцип проекта:
 
 ```text

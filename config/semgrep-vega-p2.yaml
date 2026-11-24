@@ -1,0 +1,86 @@
+rules:
+  - id: python-request-file-read
+    languages: [python]
+    severity: WARNING
+    message: HTTP request data controls a local file read or download path.
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.args[...]
+          - pattern: $REQ.args.get(...)
+          - pattern: $REQ.form[...]
+          - pattern: $REQ.form.get(...)
+          - pattern: $REQ.GET[...]
+          - pattern: $REQ.GET.get(...)
+          - pattern: $REQ.query_params[...]
+          - pattern: $REQ.query_params.get(...)
+        exact: true
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: open($PATH, ...)
+              - pattern: flask.send_file($PATH, ...)
+              - pattern: $PATH.read_text(...)
+              - pattern: $PATH.read_bytes(...)
+          - focus-metavariable: $PATH
+    metadata:
+      category: path-traversal
+      confidence: MEDIUM
+      recommendation: Resolve files by an allowlisted identifier or enforce containment in a fixed directory.
+
+  - id: javascript-request-file-read
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: HTTP request data controls a local file read or download path.
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.query.$KEY
+          - pattern: $REQ.query[$KEY]
+          - pattern: $REQ.params.$KEY
+          - pattern: $REQ.params[$KEY]
+          - pattern: $REQ.body.$KEY
+          - pattern: $REQ.body[$KEY]
+        exact: true
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: fs.readFile($PATH, ...)
+              - pattern: fs.readFileSync($PATH, ...)
+              - pattern: fs.promises.readFile($PATH, ...)
+              - pattern: fs.createReadStream($PATH, ...)
+              - pattern: $RES.sendFile($PATH, ...)
+              - pattern: $RES.download($PATH, ...)
+          - focus-metavariable: $PATH
+    metadata:
+      category: path-traversal
+      confidence: MEDIUM
+      recommendation: Select from known files or check containment after canonicalizing the requested path.
+
+  - id: php-request-file-read
+    languages: [php]
+    severity: WARNING
+    message: HTTP request data controls a local file read or download path.
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET[...]
+          - pattern: $_POST[...]
+          - pattern: $_REQUEST[...]
+          - pattern: $_COOKIE[...]
+          - pattern: filter_input(INPUT_GET, ...)
+          - pattern: filter_input(INPUT_POST, ...)
+        exact: true
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: file_get_contents($PATH, ...)
+              - pattern: readfile($PATH, ...)
+              - pattern: file($PATH, ...)
+              - pattern: fopen($PATH, "r", ...)
+              - pattern: fopen($PATH, "rb", ...)
+          - focus-metavariable: $PATH
+    metadata:
+      category: path-traversal
+      confidence: MEDIUM
+      recommendation: Select an allowlisted file within a fixed directory instead of trusting a request path.
