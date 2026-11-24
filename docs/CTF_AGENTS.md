@@ -115,3 +115,8 @@ pytest -q tests/test_ctf_engine.py tests/test_ctf_evidence.py tests/test_ctf_cli
 
 > The minimal `agent.json` manifest (`name`/`version`/`entrypoint`) may
 > require adjustment to your runner's validator before a production upload.
+
+## Офлайн-аудит границ runtime
+
+Фиксированные сценарии с настоящими проверками v7.1 и изолированными эффектами:
+[CTF_BOUNDARY_AUDIT.md](CTF_BOUNDARY_AUDIT.md).
