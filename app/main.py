@@ -56,6 +56,7 @@ def run(argv: list[str] | None = None) -> int:
         "ui",
         "benchmarks",
         "ctf",
+        "ctf-audit",
         "--version",
         "--help",
         "-h",

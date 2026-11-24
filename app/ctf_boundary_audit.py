@@ -776,12 +776,17 @@ def run_fixed_audit(base=Path("reports/ctf-boundary-audit")):
     return root, data
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--reports-dir", type=Path, default=Path("reports/ctf-boundary-audit")
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--fail-on-observations",
+        action="store_true",
+        help="Вернуть ошибку также при допуске неподтверждённых артефактов",
+    )
+    args = parser.parse_args(argv)
     root, data = run_fixed_audit(args.reports_dir)
     print(
         json.dumps(
@@ -790,7 +795,8 @@ def main():
         )
     )
     return int(
-        any(
+        (args.fail_on_observations and bool(data["observations"]))
+        or any(
             data["counts"][name]
             for name in (
                 "expectation_mismatches",
