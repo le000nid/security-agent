@@ -42,3 +42,13 @@ P3Z2 учил: «фильтр отсекает грубые имена, обхо
   - **m4 double-decode**: `?file=%252e%252e%252fsecret.txt` — `parse_qs` декодирует один раз (фильтр видит `%2e%2e%2f`), сервер декодирует ещё раз (`../`).
   - **m5 abs-path+HPP**: `?file=notes.txt&file=/etc/passwd` — `os.path.join(base, "/etc/passwd")` отбрасывает base.
 - Инфраструктура теста: `scripts/mock_server_p3z3.py` (5 режимов), `scripts/mock_model.py` (детерминированная модель), `scripts/test_p3z3.sh` (E2E с надёжной очисткой портов через `fuser` + `pgrep`).
+
+## Расширение v2 — универсализация (2026-11)
+
+Поверх фаз A/B/B2/B3/C/D движок усилен (покрыто офлайн-тестами, бюджет запросов сохранён):
+
+- **PATH_BYP расширен до 28 векторов**: backslash/mixed-slash (`..\`, `..\/`), encoded-dot формы (`%2e%2e/`, `%2e%2e%5c`), overlong UTF-8 (`..%e0%80%af`), unicode solidus (`..%u2215`).
+- **Phase A2**: фиксированные абсолютные чтения независимо от имён — `/proc/self/environ` (флаг в env), `/proc/self/cmdline`, `/etc/environment`, `/proc/self/cwd/app.py|main.py|server.py|wsgi.py|.env` и др. (18 целей).
+- **Варианты имён 3 → 6**: dotfile (`.flag`), hex-dotfile (`.f%6cag.txt` — против RAW-фильтров), имя без расширения (`flag.txt` → `flag` — сервер сам дописывает расширение при сборке; это родственный suffix-concat вектор).
+- **base64-автодекод**: флаг, спрятанный в base64-блобе внутри честного ответа, декодируется в `http_get` и попадает в EVIDENCE — finish-валидация принимает.
+- **http_discover round 3/4**: href/src/action-ссылки главной и plain-пути (`/files/notes.txt` — файл как сегмент пути).

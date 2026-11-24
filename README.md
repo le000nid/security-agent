@@ -322,8 +322,9 @@ URL, путь, shell-команда и scanner flags не могут прихо�
 Подробности: [устранение неполадок](docs/TROUBLESHOOTING.md),
 [реестр benchmark](docs/BENCHMARKS.md), [архитектура](docs/ARCHITECTURE.md),
 [VEGA adapter](docs/VEGA.md), [VEGA P1Z1 agent](docs/VEGA_P1Z1.md),
-[VEGA P3Z2 agent](docs/VEGA_P3Z2.md),
-[VEGA P3Z3 agent](docs/VEGA_P3Z3.md).
+[VEGA P2Z3 agent](docs/VEGA_P2Z3.md), [VEGA P3Z2 agent](docs/VEGA_P3Z2.md),
+[VEGA P3Z3 agent](docs/VEGA_P3Z3.md), [VEGA P4Z2 agent](docs/VEGA_P4Z2.md),
+[VEGA P4Z4 agent](docs/VEGA_P4Z4.md), [VEGA P4Z8 agent](docs/VEGA_P4Z8.md).
 
 ## Модель безопасности и ограничения
 

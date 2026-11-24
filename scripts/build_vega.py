@@ -1,13 +1,21 @@
 #!/usr/bin/env python3
 """Build the isolated, secret-free VEGA adapter archives.
 
-Three profiles ship from the same contract (exactly four root files):
+Seven profiles ship from the same contract (exactly four root files):
 
 - ``vega``  — bounded evidence agent (``vega/``)  -> dist/security-agent-vega.zip
+- ``p2z3``  — P2Z3 Git-history secret recovery agent (``vega_p2z3/``)
+              -> dist/security-agent-p2z3.zip
 - ``p3z2``  — P3Z2 LFI filter-bypass agent (``vega_p3z2/``)
               -> dist/security-agent-p3z2.zip
 - ``p3z3``  — P3Z3 check-before-assembly bypass agent (``vega_p3z3/``)
               -> dist/security-agent-p3z3.zip
+- ``p4z2``  — P4Z2 SQLi login-bypass agent (``vega_p4z2/``)
+              -> dist/security-agent-p4z2.zip
+- ``p4z4``  — P4Z4 SQLi admin-row bypass + UNION extraction agent (``vega_p4z4/``)
+              -> dist/security-agent-p4z4.zip
+- ``p4z8``  — P4Z8 «login without a key» multi-vector agent (``vega_p4z8/``)
+              -> dist/security-agent-p4z8.zip
 """
 
 from __future__ import annotations
@@ -21,10 +29,18 @@ REQUIRED = ("run.sh", "agent.json", "agent.py", "strategy.md")
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SOURCE_DIR = PROJECT_ROOT / "vega"
 OUTPUT = PROJECT_ROOT / "dist" / "security-agent-vega.zip"
+P2Z3_SOURCE_DIR = PROJECT_ROOT / "vega_p2z3"
+P2Z3_OUTPUT = PROJECT_ROOT / "dist" / "security-agent-p2z3.zip"
 P3Z2_SOURCE_DIR = PROJECT_ROOT / "vega_p3z2"
 P3Z2_OUTPUT = PROJECT_ROOT / "dist" / "security-agent-p3z2.zip"
 P3Z3_SOURCE_DIR = PROJECT_ROOT / "vega_p3z3"
 P3Z3_OUTPUT = PROJECT_ROOT / "dist" / "security-agent-p3z3.zip"
+P4Z2_SOURCE_DIR = PROJECT_ROOT / "vega_p4z2"
+P4Z2_OUTPUT = PROJECT_ROOT / "dist" / "security-agent-p4z2.zip"
+P4Z4_SOURCE_DIR = PROJECT_ROOT / "vega_p4z4"
+P4Z4_OUTPUT = PROJECT_ROOT / "dist" / "security-agent-p4z4.zip"
+P4Z8_SOURCE_DIR = PROJECT_ROOT / "vega_p4z8"
+P4Z8_OUTPUT = PROJECT_ROOT / "dist" / "security-agent-p4z8.zip"
 
 
 def build(output: Path = OUTPUT, source_dir: Path = SOURCE_DIR) -> Path:
@@ -57,6 +73,10 @@ def build(output: Path = OUTPUT, source_dir: Path = SOURCE_DIR) -> Path:
     return output
 
 
+def build_p2z3(output: Path = P2Z3_OUTPUT) -> Path:
+    return build(output, P2Z3_SOURCE_DIR)
+
+
 def build_p3z2(output: Path = P3Z2_OUTPUT) -> Path:
     return build(output, P3Z2_SOURCE_DIR)
 
@@ -65,8 +85,28 @@ def build_p3z3(output: Path = P3Z3_OUTPUT) -> Path:
     return build(output, P3Z3_SOURCE_DIR)
 
 
+def build_p4z2(output: Path = P4Z2_OUTPUT) -> Path:
+    return build(output, P4Z2_SOURCE_DIR)
+
+
+def build_p4z4(output: Path = P4Z4_OUTPUT) -> Path:
+    return build(output, P4Z4_SOURCE_DIR)
+
+
+def build_p4z8(output: Path = P4Z8_OUTPUT) -> Path:
+    return build(output, P4Z8_SOURCE_DIR)
+
+
 def build_all() -> list[Path]:
-    return [build(), build_p3z2(), build_p3z3()]
+    return [
+        build(),
+        build_p2z3(),
+        build_p3z2(),
+        build_p3z3(),
+        build_p4z2(),
+        build_p4z4(),
+        build_p4z8(),
+    ]
 
 
 if __name__ == "__main__":
