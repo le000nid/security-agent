@@ -321,10 +321,7 @@ URL, путь, shell-команда и scanner flags не могут прихо�
 
 Подробности: [устранение неполадок](docs/TROUBLESHOOTING.md),
 [реестр benchmark](docs/BENCHMARKS.md), [архитектура](docs/ARCHITECTURE.md),
-[VEGA adapter](docs/VEGA.md), [VEGA P1Z1 agent](docs/VEGA_P1Z1.md),
-[VEGA P2Z3 agent](docs/VEGA_P2Z3.md), [VEGA P3Z2 agent](docs/VEGA_P3Z2.md),
-[VEGA P3Z3 agent](docs/VEGA_P3Z3.md), [VEGA P4Z2 agent](docs/VEGA_P4Z2.md),
-[VEGA P4Z4 agent](docs/VEGA_P4Z4.md), [VEGA P4Z8 agent](docs/VEGA_P4Z8.md).
+[CTF-агенты](docs/CTF_AGENTS.md) — профили, встроенные в ядро приложения.
 
 ## Модель безопасности и ограничения
 
@@ -338,19 +335,33 @@ URL, путь, shell-команда и scanner flags не могут прихо�
 - SSRF и DAN — simulation, Security Key — synthetic data.
 - Enrichment не меняет scanner identity.
 - Успешный baseline подтверждает учебные индикаторы, а не безопасность приложения.
+- Веб-слой прогоняет каждый вход через общий страж `app/http_guard.py`:
+  percent-декодирование до валидации (включая двойное кодирование), отказ
+  на control/NUL/недопустимый-UTF-8, проверка сегментов пути без
+  разделителей и traversal, доказательство контейнера пути после
+  canonicalization (symlink-hops и абсолютные пути не покидают базу),
+  запрет дублированных query-параметров (HPP), CR/LF-фильтр для
+  отражаемых значений. Атакующие векторы (обход фильтра пути, HPP,
+  double-decode, abs-path, null-byte, header injection) покрыты тестами
+  `tests/test_web_guard.py` против живых endpoints.
 
 Версия 0.4.1 остаётся локальной однопользовательской учебной платформой. Для
 production нужны отдельные auth, multi-user isolation, audit storage и deployment review.
 
-## VEGA P1Z1 submission
+## CTF-агенты
 
-The standalone file-inspection agent reads the VEGA environment, calls its model
-gateway, validates an exact source value and writes `flag.txt`:
+CTF-агенты встроены в ядро приложения (`app/agent/ctf/`): один движок,
+профили с функциональными именами (`git_history_recovery`,
+`path_filter_bypass`, `path_assembly_bypass`, `sqli_login_bypass`,
+`sqli_admin_bypass`, `sqli_auth_inversion`, `file_inspection`, `evidence`).
 
 ```powershell
-python -m app.main vega-p1z1
-python -m app.main vega-p1z1 --package dist/vega-p1z1.zip
+python -m app.main ctf --list-profiles
+python -m app.main ctf --profile git_history_recovery
+python -m app.main ctf --profile path_filter_bypass --package dist/agent.zip
 ```
 
-The ZIP has exactly four root files and needs only Python and bash. Setup,
-limits and validation are described in [VEGA_P1Z1.md](docs/VEGA_P1Z1.md).
+Standalone-сборки — `python scripts/build_ctf.py`; архив содержит ровно
+четыре файла (`run.sh`, `agent.json`, `agent.py`, `strategy.md`),
+стандартная библиотека только. Профили, лимиты и границы безопасности
+описаны в [CTF_AGENTS.md](docs/CTF_AGENTS.md).

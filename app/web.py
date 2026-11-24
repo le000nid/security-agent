@@ -1,6 +1,8 @@
 """Loopback-only web adapter. No scanner subprocesses or Docker control here."""
 
 import secrets
+import time
+from collections import deque
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
@@ -15,6 +17,12 @@ from pydantic import BaseModel, ConfigDict
 from app import __version__
 from app.benchmarks import BenchmarkId, Mode
 from app.chat import ChatController, ChatLLM, ChatRequest, ScanConfirmation
+from app.http_guard import (
+    header_safe,
+    no_scheme,
+    read_filters,
+    safe_segment,
+)
 from app.jobs import JobManager
 from app.repository import RunRepository
 from app.service import RunRequest, RunService
@@ -55,6 +63,28 @@ ERRORS = {
     "proposal_expired",
 }
 
+# brute-force resistance: POSTs are throttled per sliding window
+POST_RATE_LIMIT = 30  # max POSTs ...
+POST_RATE_WINDOW = 60.0  # ... per this many seconds
+MAX_QUERY_CHARS = 2_000  # a longer query string is an attack, not a filter
+MAX_HEADERS = 60  # header-count cap (request smuggling / parser abuse)
+
+# codes raised by app.http_guard — surfaced as 400, never echoing the input
+GUARD_ERRORS = {
+    "invalid_text",
+    "invalid_path_segment",
+    "invalid_report_file",
+    "invalid_run_id",
+    "invalid_header_value",
+    "duplicate_parameter",
+    "input_too_long",
+    "path_outside_base",
+    "rate_limited",
+    "query_too_long",
+    "too_many_headers",
+    "invalid_uri_scheme",
+}
+
 
 def create_app(
     *,
@@ -76,6 +106,7 @@ def create_app(
     chat = ChatController(service.benchmarks, repository, jobs, llm)
     token = secrets.token_urlsafe(32)
     app.state.jobs, app.state.repository, app.state.chat = jobs, repository, chat
+    app.state.post_times = deque()
     assets = Path(__file__).with_name("ui")
     templates = Jinja2Templates(directory=assets / "templates")
     app.mount("/static", StaticFiles(directory=assets / "static"), name="static")
@@ -98,7 +129,20 @@ def create_app(
             valid_host = False
         if not valid_host:
             return JSONResponse({"error": "host_not_allowed"}, status_code=403)
+        # header-count cap: parser abuse and smuggling helpers
+        if len(request.headers) > MAX_HEADERS:
+            return JSONResponse({"error": "too_many_headers"}, status_code=400)
+        # query budget: long encoded chains are traversal probes, not filters
+        if len(request.url.query) > MAX_QUERY_CHARS:
+            return JSONResponse({"error": "query_too_long"}, status_code=414)
         if request.method == "POST":
+            now = time.monotonic()
+            bucket = request.app.state.post_times
+            while bucket and now - bucket[0] > POST_RATE_WINDOW:
+                bucket.popleft()
+            if len(bucket) >= POST_RATE_LIMIT:
+                return JSONResponse({"error": "rate_limited"}, status_code=429)
+            bucket.append(now)
             origin = request.headers.get("origin")
             if (
                 (origin and origin != f"{request.url.scheme}://{host}")
@@ -121,11 +165,17 @@ def create_app(
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Cache-Control"] = "no-store"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+        response.headers["Permissions-Policy"] = (
+            "camera=(), microphone=(), geolocation=(), payment=()"
+        )
         return response
 
     @app.exception_handler(ValueError)
     async def safe_value_error(request, exc):
-        code = str(exc) if str(exc) in ERRORS else "invalid_request"
+        code = str(exc) if str(exc) in ERRORS | GUARD_ERRORS else "invalid_request"
         status = (
             409
             if code == "scan_already_running"
@@ -166,25 +216,31 @@ def create_app(
         return repository.list()
 
     @app.get("/api/runs/{run_id}")
-    def detail(run_id: str):
+    def detail(run_id: str, request: Request):
+        safe_segment(run_id, code="invalid_run_id")
         return repository.detail(run_id)
 
     @app.get("/api/runs/{run_id}/findings")
-    def findings(
-        run_id: str,
-        severity: str | None = None,
-        source: str | None = None,
-        category: str | None = None,
-    ):
+    def findings(run_id: str, request: Request):
+        safe_segment(run_id, code="invalid_run_id")
+        filters = read_filters(request.query_params)
         return repository.findings(
-            run_id, severity=severity, source=source, category=category
+            run_id,
+            severity=filters.severity,
+            source=filters.source,
+            category=filters.category,
         )
 
     @app.get("/api/runs/{run_id}/artifacts/{filename}")
     def artifact(run_id: str, filename: str):
+        safe_segment(run_id, code="invalid_run_id")
+        no_scheme(filename, code="invalid_report_file")
+        safe_segment(filename, code="invalid_report_file")
         text = repository.text(run_id, filename)
+        safe_name = header_safe(filename)
         return PlainTextResponse(
-            text, headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+            text,
+            headers={"Content-Disposition": f'attachment; filename="{safe_name}"'},
         )
 
     @app.post("/api/scans", status_code=202)
@@ -195,6 +251,7 @@ def create_app(
 
     @app.get("/api/jobs/{job_id}")
     def job(job_id: str):
+        safe_segment(job_id, code="job_not_found")
         return jobs.get(job_id).model_dump(mode="json")
 
     @app.get("/api/llm")
