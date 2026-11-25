@@ -25,7 +25,7 @@ def test_native_fixed_audit_has_no_network_or_external_effects(audit):
     root, data = audit
     assert data["source"] == "fixed_fixture" and not data["model_used"]
     assert data["model_requests"] == 0
-    assert data["counts"]["cases"] == 19
+    assert data["counts"]["cases"] == 28
     for name in (
         "expectation_mismatches",
         "boundary_bypasses_neutralized",
@@ -144,6 +144,17 @@ def test_finish_acceptance_stays_a_team_decision(audit):
     report = (root / "ctf_audit.md").read_text(encoding="utf-8")
     assert "Нативный remember не патчился" in report
     assert "Ждёт решения команды" in report
+    limits = data["coverage_limits"]
+    assert limits["evidence_profile_included"] is False
+    assert limits["outbound_connections"] == 0
+    assert limits["sqli_target_probe"] == "fixture_substituted"
+    assert limits["open_finish_cases"] == [
+        "inspection_unverified_second",
+        "git_absent_current",
+        "git_current_second",
+    ]
+    for statement in limits["statements"]:
+        assert statement in report
 
 
 def test_profile_specific_finish_rules_preserved(audit):
@@ -263,6 +274,56 @@ def test_unlinked_decode_is_not_http_evidence_and_writes_nothing(audit):
     assert "decode_evidence_provenance" not in {
         item["id"] for item in data["observations"]
     }
+
+
+def test_remaining_profiles_stay_inside_the_fixture(audit):
+    _, data = audit
+    assembly = case(data, "assembly_paths_stay_on_origin")
+    assert assembly["profile"] == "path_assembly_bypass"
+    assert any(
+        "file=notes.txt&file=" in event["url"]
+        for event in events(assembly, "http.send")
+    )
+    included = case(data, "include_schemes_stay_on_origin")
+    assert included["profile"] == "remote_inclusion"
+    included_urls = [event["url"] for event in events(included, "http.send")]
+    assert any("php%3A%2F%2F" in url for url in included_urls)
+    assert any("file%3A%2F%2F" in url for url in included_urls)
+    for name in (
+        "assembly_paths_stay_on_origin",
+        "assembly_verified_response",
+        "include_schemes_stay_on_origin",
+        "sqli_login_verified_finish",
+        "sqli_admin_decoy_steer",
+        "sqli_cookie_stays_on_origin",
+    ):
+        sends = events(case(data, name), "http.send")
+        assert sends
+        assert all(
+            not event["outside_origin"] and not event["actual_connection"]
+            for event in sends
+        )
+        assert case(data, name)["unexpected_network_attempts"] == 0
+        assert case(data, name)["actual_external_effects"] == 0
+    login = case(data, "sqli_login_verified_finish")
+    assert events(login, "target.resolve")[0]["native_probe_suppressed"]
+    assert login["finish_verdicts"][0]["accepted"] is True
+    admin = case(data, "sqli_admin_decoy_steer")
+    assert [verdict["accepted"] for verdict in admin["finish_verdicts"]] == [
+        False,
+        True,
+    ]
+    assert admin["finish_verdicts"][0]["steer_candidate"] is True
+    assert admin["unverified_artifact_admissions"] == 0
+    denied = case(data, "sqli_post_outside_denied")
+    assert denied["error_type"] == "ValueError"
+    assert events(denied, "http.send") == []
+    cookie = case(data, "sqli_cookie_stays_on_origin")
+    assert events(cookie, "http.send")[0]["cookie_header"] == "session=AUDITCOOKIE"
+    for name in ("assembly_unverified_finish", "include_unverified_finish"):
+        row = case(data, name)
+        assert row["finish_verdicts"][0]["accepted"] is False
+        assert events(row, "artifact.write") == []
 
 
 def test_http_response_candidate_still_finishes(audit):

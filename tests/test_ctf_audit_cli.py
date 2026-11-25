@@ -30,7 +30,7 @@ def test_project_cli_runs_audit_without_dotenv_or_model(
     monkeypatch.setattr(cli, "OpenAICompatibleClient", forbidden)
     assert project_main.run(["ctf-audit", "--reports-dir", str(tmp_path)]) == 0
     summary = json.loads(capsys.readouterr().out.splitlines()[-1])
-    assert summary["cases"] == 19
+    assert summary["cases"] == 28
     assert summary["status"] == "completed_with_observations"
     reports = list(tmp_path.glob("*/ctf_audit.json"))
     assert len(reports) == 1

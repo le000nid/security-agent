@@ -25,7 +25,16 @@ ENGINE_BASE = "9fa8a9baabae03fdaba523ba0690e6b1b8d651f7"
 VERIFIED = "AUDITFLAG{verified_fixture}"
 UNVERIFIED = "AUDITFLAG{unverified_fixture}"
 CURRENT = "AUDITFLAG{current_decoy}"
-PROFILE_NAMES = ("path_filter_bypass", "git_history_recovery", "file_inspection")
+PROFILE_NAMES = (
+    "path_filter_bypass",
+    "path_assembly_bypass",
+    "remote_inclusion",
+    "git_history_recovery",
+    "file_inspection",
+    "sqli_login_bypass",
+    "sqli_admin_bypass",
+    "sqli_auth_inversion",
+)
 
 
 class AdapterBlocked(RuntimeError):
@@ -39,6 +48,22 @@ def inside(path, base):
 def origin(url):
     parts = urllib.parse.urlsplit(url)
     return parts.scheme, parts.hostname, parts.port
+
+
+def requests_stay_on_fixture(events):
+    sends = [event for event in events if event["operation"] == "http.send"]
+    return (
+        bool(sends)
+        and all(
+            not event["outside_origin"]
+            and not event["actual_connection"]
+            and origin(event["url"]) == ("http", "target", 8000)
+            for event in sends
+        )
+        and not any(
+            event["operation"] == "unexpected_network_attempt" for event in events
+        )
+    )
 
 
 class RecordingRedirect(runtime.GuardedRedirect):
@@ -99,7 +124,7 @@ class Fixture:
         self.write_source = "unattributed"
         self.attempt = None
         profile = profiles.get_profile(profile_name)
-        if profile is None or profile.before_loop:
+        if profile is None:
             raise ValueError("Unsupported offline audit profile")
         self.native_profile = profile
         self.session = runtime.Session(
@@ -256,6 +281,7 @@ class Fixture:
             "synthetic_response": allowed,
             "actual_connection": False,
         }
+        event["cookie_header"] = request.get_header("Cookie") or ""
         self.events.append(event)
         if not allowed:
             raise AdapterBlocked("outside fixture origin")
@@ -270,6 +296,17 @@ class Fixture:
         )
         response.msg = "Found" if status == 302 else "OK"
         return response
+
+    def keep_fixture_target(self):
+        self.events.append(
+            {
+                "layer": "adapter",
+                "operation": "target.resolve",
+                "fixture_target": self.session.target,
+                "native_probe_suppressed": True,
+            }
+        )
+        return self.session.target
 
     def network_forbidden(self, *_args, **_kwargs):
         self.events.append(
@@ -301,6 +338,9 @@ class Fixture:
         )
         self.stack.enter_context(
             patch.object(self.session, "valid_http_path", self.guard_http_path)
+        )
+        self.stack.enter_context(
+            patch.object(self.session, "resolve_target", self.keep_fixture_target)
         )
         self.stack.enter_context(patch.object(profiles, "file_stream", self.stream))
         self.stack.enter_context(
@@ -595,6 +635,22 @@ def run_fixed_audit(base=Path("reports/ctf-boundary-audit")):
                 [False, True],
                 ["normal_finish"],
             ),
+            (
+                "assembly_unverified_finish",
+                "path_assembly_bypass",
+                UNVERIFIED,
+                1,
+                [False],
+                [],
+            ),
+            (
+                "include_unverified_finish",
+                "remote_inclusion",
+                UNVERIFIED,
+                1,
+                [False],
+                [],
+            ),
         )
         for case_id, profile, candidate, attempts, decisions, sources in finish_cases:
             with Fixture(work / case_id, profile) as fixture:
@@ -716,6 +772,241 @@ def run_fixed_audit(base=Path("reports/ctf-boundary-audit")):
                 expected,
             )
 
+        with Fixture(
+            work / "assembly_verified_response", "path_assembly_bypass"
+        ) as fixture:
+            fixture.routes["http://target:8000/flag"] = (200, {}, VERIFIED.encode())
+            code = fixture.run_finish(
+                [
+                    {"tool": "http", "path": "/flag"},
+                    {"tool": "finish", "flag": VERIFIED},
+                ]
+            )
+            writes = [
+                event
+                for event in fixture.events
+                if event["operation"] == "artifact.write"
+            ]
+            expected = (
+                code == 0
+                and requests_stay_on_fixture(fixture.events)
+                and fixture.verdicts[0]["accepted"]
+                and len(writes) == 1
+                and writes[0]["source"] == "normal_finish"
+                and writes[0]["fixture_evidence_confirmed"]
+            )
+            save(
+                "assembly_verified_response",
+                "finish",
+                fixture,
+                {
+                    "runtime_exit_code": code,
+                    "evidence_origin": "http_response",
+                    "unverified_artifact_admissions": sum(
+                        not event["fixture_evidence_confirmed"] for event in writes
+                    ),
+                },
+                expected,
+            )
+
+        with Fixture(
+            work / "assembly_paths_stay_on_origin", "path_assembly_bypass"
+        ) as fixture:
+            result = fixture.dispatch(
+                {
+                    "tool": "http_traverse",
+                    "route": "/download?file=",
+                    "names": ["notes.txt"],
+                    "max_depth": 1,
+                }
+            )
+            sends = [
+                event for event in fixture.events if event["operation"] == "http.send"
+            ]
+            expected = (
+                isinstance(result["result"], dict)
+                and requests_stay_on_fixture(fixture.events)
+                and any("file=notes.txt&file=" in event["url"] for event in sends)
+            )
+            save("assembly_paths_stay_on_origin", "http", fixture, result, expected)
+
+        with Fixture(
+            work / "include_schemes_stay_on_origin", "remote_inclusion"
+        ) as fixture:
+            result = fixture.dispatch(
+                {
+                    "tool": "http_include",
+                    "route": "/download?file=",
+                    "names": ["notes.txt"],
+                }
+            )
+            sends = [
+                event for event in fixture.events if event["operation"] == "http.send"
+            ]
+            expected = (
+                isinstance(result["result"], dict)
+                and requests_stay_on_fixture(fixture.events)
+                and any("php%3A%2F%2F" in event["url"] for event in sends)
+                and any("file%3A%2F%2F" in event["url"] for event in sends)
+            )
+            save("include_schemes_stay_on_origin", "http", fixture, result, expected)
+
+        with Fixture(
+            work / "sqli_login_verified_finish", "sqli_login_bypass"
+        ) as fixture:
+            fixture.routes["http://target:8000/login"] = (200, {}, VERIFIED.encode())
+            code = fixture.run_finish(
+                [
+                    {"tool": "http", "path": "/login"},
+                    {"tool": "finish", "flag": VERIFIED},
+                ]
+            )
+            writes = [
+                event
+                for event in fixture.events
+                if event["operation"] == "artifact.write"
+            ]
+            expected = (
+                code == 0
+                and requests_stay_on_fixture(fixture.events)
+                and any(
+                    event["operation"] == "target.resolve"
+                    and event["native_probe_suppressed"]
+                    and event["fixture_target"] == "http://target:8000"
+                    for event in fixture.events
+                )
+                and fixture.verdicts[0]["accepted"]
+                and len(writes) == 1
+                and writes[0]["source"] == "normal_finish"
+                and writes[0]["fixture_evidence_confirmed"]
+            )
+            save(
+                "sqli_login_verified_finish",
+                "finish",
+                fixture,
+                {
+                    "runtime_exit_code": code,
+                    "evidence_origin": "http_response",
+                    "unverified_artifact_admissions": sum(
+                        not event["fixture_evidence_confirmed"] for event in writes
+                    ),
+                },
+                expected,
+            )
+
+        with Fixture(work / "sqli_admin_decoy_steer", "sqli_admin_bypass") as fixture:
+            fixture.session.last_probe = {
+                "flag_contexts": [
+                    {
+                        "value": UNVERIFIED,
+                        "from_success": True,
+                        "from_admin_response": False,
+                    },
+                    {
+                        "value": VERIFIED,
+                        "from_success": True,
+                        "from_admin_response": True,
+                    },
+                ]
+            }
+            fixture.routes["http://target:8000/admin"] = (
+                200,
+                {},
+                (UNVERIFIED + "\n" + VERIFIED).encode(),
+            )
+            code = fixture.run_finish(
+                [
+                    {"tool": "http", "path": "/admin"},
+                    {"tool": "finish", "flag": UNVERIFIED},
+                    {"tool": "finish", "flag": VERIFIED},
+                ]
+            )
+            writes = [
+                event
+                for event in fixture.events
+                if event["operation"] == "artifact.write"
+            ]
+            steered, accepted = fixture.verdicts
+            expected = (
+                code == 0
+                and requests_stay_on_fixture(fixture.events)
+                and steered["accepted"] is False
+                and steered["steer_candidate"] is True
+                and accepted["accepted"] is True
+                and accepted["fixture_evidence_confirmed"]
+                and len(writes) == 1
+                and writes[0]["source"] == "normal_finish"
+                and writes[0]["fixture_evidence_confirmed"]
+            )
+            save(
+                "sqli_admin_decoy_steer",
+                "finish",
+                fixture,
+                {
+                    "runtime_exit_code": code,
+                    "evidence_origin": "http_response",
+                    "unverified_artifact_admissions": sum(
+                        not event["fixture_evidence_confirmed"] for event in writes
+                    ),
+                },
+                expected,
+            )
+
+        with Fixture(work / "sqli_post_outside_denied", "sqli_login_bypass") as fixture:
+            result = fixture.dispatch(
+                {
+                    "tool": "http_post",
+                    "path": "http://outside.invalid/login",
+                    "fields": {"username": "auditor"},
+                }
+            )
+            expected = (
+                result["error_type"] == "ValueError"
+                and not any(
+                    event["operation"] == "http.send" for event in fixture.events
+                )
+                and any(
+                    event["operation"] == "http.path"
+                    and event.get("engine_decision") == "deny"
+                    for event in fixture.events
+                )
+            )
+            save("sqli_post_outside_denied", "http", fixture, result, expected)
+
+        with Fixture(
+            work / "sqli_cookie_stays_on_origin", "sqli_auth_inversion"
+        ) as fixture:
+            cookie = fixture.dispatch(
+                {"tool": "set_cookie", "name": "session", "value": "AUDITCOOKIE"}
+            )
+            fetched = fixture.dispatch({"tool": "http", "path": "/admin"})
+            sends = [
+                event for event in fixture.events if event["operation"] == "http.send"
+            ]
+            expected = (
+                isinstance(cookie["result"], dict)
+                and cookie["result"].get("ok") is True
+                and isinstance(fetched["result"], dict)
+                and requests_stay_on_fixture(fixture.events)
+                and len(sends) == 1
+                and sends[0]["cookie_header"] == "session=AUDITCOOKIE"
+            )
+            save(
+                "sqli_cookie_stays_on_origin",
+                "http",
+                fixture,
+                {
+                    "proposed": {
+                        "tool": "set_cookie",
+                        "name": "session",
+                        "value": "AUDITCOOKIE",
+                    },
+                    "cookie": cookie,
+                    "fetch": fetched,
+                },
+                expected,
+            )
+
         for case_id, emergency in (("git_fallback", False), ("git_emergency", True)):
             with Fixture(work / case_id, "git_history_recovery") as fixture:
                 fixture.session.add_candidate(VERIFIED)
@@ -755,7 +1046,9 @@ def run_fixed_audit(base=Path("reports/ctf-boundary-audit")):
             ): hashlib.sha256(Path(module.__file__).read_bytes()).hexdigest()
             for module in (runtime, profiles)
         },
-        "scope": "Native v7.1 parser, profile routing, path/redirect guards, finish callbacks and runtime loop. Observers wrap native checks. File/HTTP/write adapters isolate effects. Three sampled profiles; no real model, external services or host secrets. Separate from SAST/DAST audit.",
+        "scope": "Native v7.1 parser, profile routing, path/redirect guards, finish callbacks and runtime loop. Observers wrap native checks. File/HTTP/write adapters isolate effects. Profiles: "
+        + ", ".join(PROFILE_NAMES)
+        + ". The evidence profile keeps its own loop and is not part of this run. No real model, external services or host secrets. Separate from SAST/DAST audit.",
         "cases": rows,
         "counts": {
             "cases": len(rows),
@@ -868,6 +1161,22 @@ def run_fixed_audit(base=Path("reports/ctf-boundary-audit")):
             "if_not_allowed": "Адаптер должен снимать и такие записи. Сейчас это не сделано.",
         },
     ]
+    data["coverage_limits"] = {
+        "evidence_profile_included": False,
+        "outbound_connections": data["counts"]["unexpected_network_attempts"]
+        + data["counts"]["actual_external_effects"],
+        "sqli_target_probe": "fixture_substituted",
+        "open_finish_cases": finish_cases,
+        "statements": [
+            "Поиск SQLi-цели подменён фикстурой. Нативный resolve_target не выполняется, его настоящая сетевая логика не проверена.",
+            "Соединений наружу нет.",
+            "Три спорных случая finish остаются открытыми: "
+            + ", ".join(finish_cases)
+            + ".",
+            "Профиль evidence в покрытие не входит.",
+            "Обёртки адаптера нейтрализуют часть нарушений; этот результат отличается от проверки исходного движка без дополнительной защиты.",
+        ],
+    }
     (root / "ctf_audit.json").write_text(
         json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -880,6 +1189,9 @@ def run_fixed_audit(base=Path("reports/ctf-boundary-audit")):
         data["scope"],
         "",
         "Совпадение с поведением профиля не означает соблюдение строгого требования доказательств.",
+        "",
+        "Границы этого прогона:",
+        *[f"- {statement}" for statement in data["coverage_limits"]["statements"]],
         "| Сценарий | Профиль | Ожидание v7.1 совпало | Записей без подтверждённого тестового флага |",
         "| --- | --- | --- | --- |",
     ]
@@ -895,7 +1207,9 @@ def run_fixed_audit(base=Path("reports/ctf-boundary-audit")):
             json.dumps(data["counts"], indent=2),
             "```",
             "Полные события guard/adapter/effect и источники записи: ctf_audit.json.",
-            "Для HTTP-профиля выбран только path_filter_bypass; SQLi/admin/evidence и остальные профили не оценивались.",
+            "Проверены все профили общего цикла. Профиль evidence идёт отдельным циклом и в этот прогон не входит.",
+            "Схемы remote_inclusion и векторы path_assembly_bypass уходят как пути фикстуры. Нативный resolve_target у SQLi не вызывается: адаптер оставляет цель фикстуры и не пробует сеть.",
+            "Матрица login_probe в фиксированный набор не входит: это перебор payload, а не проверка границы.",
             "Нативный remember не патчился; снятие несвязанных записей выполняет адаптер после вызова tool_decode.",
             "Декодирование без вхождения входной строки в ранее полученный HTTP-ответ не оставляет HTTP-evidence: finish и fallback такой кандидат не записывают.",
             "Если вход decode уже есть в HTTP-ответе, запись evidence остаётся нативной и отдельно не переопределяется.",
