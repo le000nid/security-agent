@@ -1,0 +1,47 @@
+name: CTF boundary audit
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'app/agent/ctf/**'
+      - 'app/ctf_boundary_audit.py'
+      - 'app/cli.py'
+      - 'app/main.py'
+      - 'tests/test_ctf_boundary_audit.py'
+      - 'tests/test_ctf_audit_cli.py'
+      - '.github/workflows/ctf-boundary-audit.yml'
+      - 'requirements*.txt'
+  pull_request:
+    paths:
+      - 'app/agent/ctf/**'
+      - 'app/ctf_boundary_audit.py'
+      - 'app/cli.py'
+      - 'app/main.py'
+      - 'tests/test_ctf_boundary_audit.py'
+      - 'tests/test_ctf_audit_cli.py'
+      - '.github/workflows/ctf-boundary-audit.yml'
+      - 'requirements*.txt'
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Проверка адаптера и CLI
+        run: python -m pytest -q tests/test_ctf_boundary_audit.py tests/test_ctf_audit_cli.py
+      - name: Офлайн-аудит CTF-runtime
+        run: python -m app.main ctf-audit --reports-dir reports/ctf-boundary-audit
+      - name: Сохранение отчётов
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ctf-boundary-audit
+          path: reports/ctf-boundary-audit/
+          if-no-files-found: ignore
+          retention-days: 14

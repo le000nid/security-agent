@@ -60,6 +60,17 @@ def run(argv: list[str]) -> int:
         metavar="MD",
         help="strategy text for the bounded evidence profile (optional)",
     )
+    audit = sub.add_parser(
+        "ctf-audit", help="Проверить границы CTF-runtime без модели и сети"
+    )
+    audit.add_argument(
+        "--reports-dir", type=Path, default=Path("reports/ctf-boundary-audit")
+    )
+    audit.add_argument(
+        "--fail-on-observations",
+        action="store_true",
+        help="Вернуть ошибку также при допуске неподтверждённых артефактов",
+    )
     ui = sub.add_parser("ui")
     ui.add_argument(
         "--host", choices=("127.0.0.1", "localhost", "0.0.0.0"), default="127.0.0.1"
@@ -67,6 +78,13 @@ def run(argv: list[str]) -> int:
     ui.add_argument("--port", type=int, default=8080)
     ui.add_argument("--runs-dir", type=Path, default=Path("runs"))
     args = parser.parse_args(argv)
+    if args.command == "ctf-audit":
+        from app.ctf_boundary_audit import main as run_audit
+
+        audit_args = ["--reports-dir", str(args.reports_dir)]
+        if args.fail_on_observations:
+            audit_args.append("--fail-on-observations")
+        return run_audit(audit_args)
     if args.command == "ctf":
         return _run_ctf(args)
     load_dotenv()
