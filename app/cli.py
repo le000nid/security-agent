@@ -60,6 +60,22 @@ def run(argv: list[str]) -> int:
         metavar="MD",
         help="strategy text for the bounded evidence profile (optional)",
     )
+    arsenal = sub.add_parser(
+        "arsenal",
+        help="Attack/defense arsenal for SAST domains (LFI, RFI, SQLI)",
+    )
+    arsenal.add_argument(
+        "--category",
+        choices=("lfi", "rfi", "sqli", "all"),
+        default="all",
+        help="arsenal domain to exercise",
+    )
+    arsenal.add_argument(
+        "--mode",
+        choices=("campaign", "matrix", "docs"),
+        default="campaign",
+        help="campaign table, vector x layer matrix, or cheat sheet",
+    )
     ui = sub.add_parser("ui")
     ui.add_argument(
         "--host", choices=("127.0.0.1", "localhost", "0.0.0.0"), default="127.0.0.1"
@@ -69,6 +85,8 @@ def run(argv: list[str]) -> int:
     args = parser.parse_args(argv)
     if args.command == "ctf":
         return _run_ctf(args)
+    if args.command == "arsenal":
+        return _run_arsenal(args)
     load_dotenv()
     if args.command == "benchmarks":
         try:
@@ -153,6 +171,32 @@ def run(argv: list[str]) -> int:
     logger.info("Report: %s", Path(result.reports_path) / "report.md")
     logger.info("Summary: %s", Path(result.reports_path) / "summary.json")
     return result.exit_code
+
+
+def _run_arsenal(args) -> int:
+    """Dispatch the ``arsenal`` subcommand: campaign / matrix / docs."""
+    from app.agent import arsenal
+
+    if args.mode == "docs":
+        print(arsenal.render_docs())
+        return 0
+    categories = ("lfi", "rfi", "sqli") if args.category == "all" else (args.category,)
+    if args.mode == "matrix":
+        for category in categories:
+            print(arsenal.render_matrix(category))
+            print()
+        return 0
+    failures = 0
+    for category in categories:
+        result = arsenal.run_campaign(category)
+        print(result.render())
+        print()
+        failures += len(result.failed)
+    if failures:
+        print(f"arsenal: {failures} vector(s) failed; defense must stay ahead")
+        return 2
+    print("arsenal: defense ahead of attack in every exercised vector")
+    return 0
 
 
 def _run_ctf(args) -> int:
