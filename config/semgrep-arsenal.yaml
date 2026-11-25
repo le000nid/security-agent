@@ -1,0 +1,109 @@
+# SAST-правила арсенала v10: семь реальных ловушек — семь правил.
+# Правила целенаправленно текстово-структурные (pattern-regex/структурные
+# шаблоны), чтобы одинаково работать на всех поддерживаемых версиях Semgrep.
+# Каждое правило ссылается на CWE и даёт рекомендацию из docs/ARSENAL.md.
+
+rules:
+  - id: arsenal-python-stringbuilt-sql
+    languages: [python]
+    severity: WARNING
+    message: >
+      SQL built as an f-string; user data enters the query text (CWE-89).
+    pattern-regex: >-
+      (?i)f['"][^'"]*\b(select|insert|update|delete|replace|with|pragma|attach)\b
+    metadata:
+      category: sqli
+      confidence: MEDIUM
+      recommendation: >
+        Use parameterized statements (placeholders) and allowlisted
+        identifiers; never interpolate values into SQL text.
+
+  - id: arsenal-python-executescript-input
+    languages: [python]
+    severity: WARNING
+    message: >
+      executescript() receives a variable; stacked statements, PRAGMA and
+      ATTACH become reachable from input (CWE-89).
+    pattern-regex: >-
+      \.executescript\(\s*[a-zA-Z_][a-zA-Z0-9_]*\s*\)
+    metadata:
+      category: sqli
+      confidence: MEDIUM
+      recommendation: >
+        Run single statements via execute() with placeholders; expose a
+        fixed registry of admin operations instead of raw scripts.
+
+  - id: arsenal-python-open-concat
+    languages: [python]
+    severity: WARNING
+    message: >
+      open() over a concatenated path; request-controlled segments can
+      traverse outside the base directory (CWE-22).
+    pattern-regex: >-
+      open\(\s*[a-zA-Z_][a-zA-Z0-9_.\[\]]*\s*\+
+    metadata:
+      category: path-traversal
+      confidence: MEDIUM
+      recommendation: >
+        Build paths from allowlisted segments and prove containment after
+        realpath resolution (contained_path/safe_file_param).
+
+  - id: arsenal-python-join-open-write
+    languages: [python]
+    severity: WARNING
+    message: >
+      Archive member or user path joined into a filesystem write; archive
+      members can carry "../" (CWE-23).
+    pattern-regex: >-
+      open\(\s*os\.path\.join\(
+    metadata:
+      category: path-traversal
+      confidence: MEDIUM
+      recommendation: >
+        Reject member paths with parent segments before writing; extract
+        only into an allowlisted subdirectory after canonicalization.
+
+  - id: arsenal-python-urlopen-variable
+    languages: [python]
+    severity: WARNING
+    message: >
+      Outbound fetch receives a variable URL; scheme/host confusion and
+      SSRF become reachable (CWE-918).
+    pattern-regex: >-
+      urlopen\(\s*[a-zA-Z_][a-zA-Z0-9_.\[\]]*
+    metadata:
+      category: ssrf
+      confidence: MEDIUM
+      recommendation: >
+        Validate scheme strictly, strip userinfo, canonicalize the host
+        (IP literals, IDN), enforce an egress allowlist and pin redirects.
+
+  - id: arsenal-python-extractall-unfiltered
+    languages: [python]
+    severity: WARNING
+    message: >
+      extractall() trusts archive members; a "../" member or a symlink
+      member writes outside the destination (CWE-22/23).
+    pattern-regex: >-
+      \.extractall\(
+    metadata:
+      category: path-traversal
+      confidence: MEDIUM
+      recommendation: >
+        Extract member-by-member: reject parent segments and non-regular
+        members (symlink/hardlink/devices) before writing anything.
+
+  - id: arsenal-python-vacuum-into-built
+    languages: [python]
+    severity: WARNING
+    message: >
+      VACUUM INTO built from an f-string; the database copy is written to
+      an attacker-chosen path (CWE-89).
+    pattern-regex: >-
+      (?i)f['"][^'"]*vacuum\s+into
+    metadata:
+      category: sqli
+      confidence: MEDIUM
+      recommendation: >
+        Expose admin database operations as a fixed registry of
+        parameterized calls; never build VACUUM INTO paths from input.

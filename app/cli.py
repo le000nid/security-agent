@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -39,10 +40,42 @@ def run(argv: list[str]) -> int:
         "operation", choices=("list", "show"), default="list", nargs="?"
     )
     benchmarks.add_argument("benchmark_id", nargs="?")
-    vega = sub.add_parser(
-        "vega-p1z1", help="Run or package the standalone VEGA P1Z1 agent"
+    ctf = sub.add_parser("ctf", help="Run or package the embedded CTF agents")
+    ctf.add_argument(
+        "--profile",
+        metavar="NAME",
+        help="functional profile name (see --list-profiles)",
     )
-    vega.add_argument("--package", type=Path, metavar="ZIP")
+    ctf.add_argument(
+        "--package", type=Path, metavar="ZIP", help="build the standalone ZIP"
+    )
+    ctf.add_argument(
+        "--list-profiles",
+        action="store_true",
+        help="list available profiles and exit",
+    )
+    ctf.add_argument(
+        "--strategy",
+        type=Path,
+        metavar="MD",
+        help="strategy text for the bounded evidence profile (optional)",
+    )
+    arsenal = sub.add_parser(
+        "arsenal",
+        help="Attack/defense arsenal for SAST domains (LFI, RFI, SQLI)",
+    )
+    arsenal.add_argument(
+        "--category",
+        choices=("lfi", "rfi", "sqli", "all"),
+        default="all",
+        help="arsenal domain to exercise",
+    )
+    arsenal.add_argument(
+        "--mode",
+        choices=("campaign", "matrix", "docs"),
+        default="campaign",
+        help="campaign table, vector x layer matrix, or cheat sheet",
+    )
     ui = sub.add_parser("ui")
     ui.add_argument(
         "--host", choices=("127.0.0.1", "localhost", "0.0.0.0"), default="127.0.0.1"
@@ -50,19 +83,10 @@ def run(argv: list[str]) -> int:
     ui.add_argument("--port", type=int, default=8080)
     ui.add_argument("--runs-dir", type=Path, default=Path("runs"))
     args = parser.parse_args(argv)
-    if args.command == "vega-p1z1":
-        if args.package is not None:
-            from app.vega_p1z1.package import build_archive
-
-            try:
-                print(build_archive(args.package))
-                return 0
-            except (OSError, ValueError, SyntaxError):
-                print("Cannot build P1Z1 archive")
-                return 2
-        from app.vega_p1z1.agent import main as run_p1z1
-
-        return run_p1z1()
+    if args.command == "ctf":
+        return _run_ctf(args)
+    if args.command == "arsenal":
+        return _run_arsenal(args)
     load_dotenv()
     if args.command == "benchmarks":
         try:
@@ -147,3 +171,70 @@ def run(argv: list[str]) -> int:
     logger.info("Report: %s", Path(result.reports_path) / "report.md")
     logger.info("Summary: %s", Path(result.reports_path) / "summary.json")
     return result.exit_code
+
+
+def _run_arsenal(args) -> int:
+    """Dispatch the ``arsenal`` subcommand: campaign / matrix / docs."""
+    from app.agent import arsenal
+
+    if args.mode == "docs":
+        print(arsenal.render_docs())
+        return 0
+    categories = ("lfi", "rfi", "sqli") if args.category == "all" else (args.category,)
+    if args.mode == "matrix":
+        for category in categories:
+            print(arsenal.render_matrix(category))
+            print()
+        return 0
+    failures = 0
+    for category in categories:
+        result = arsenal.run_campaign(category)
+        print(result.render())
+        print()
+        failures += len(result.failed)
+    if failures:
+        print(f"arsenal: {failures} vector(s) failed; defense must stay ahead")
+        return 2
+    print("arsenal: defense ahead of attack in every exercised vector")
+    return 0
+
+
+def _run_ctf(args) -> int:
+    """Dispatch the ``ctf`` subcommand to the embedded CTF engine."""
+    from app.agent.ctf import PROFILES
+    from app.agent.ctf.profiles import get_profile
+
+    if args.list_profiles:
+        for name in PROFILES:
+            profile = get_profile(name)
+            summary = profile.summary if profile else "bounded evidence loop"
+            print(f"{name:22s} {summary}")
+        return 0
+    name = args.profile
+    if not name:
+        print("error: --profile is required (or --list-profiles)", file=sys.stderr)
+        return 2
+    key = str(name).strip().lower()
+    if key not in PROFILES:
+        print(f"error: unknown profile {name!r}; see --list-profiles", file=sys.stderr)
+        return 2
+    if args.package is not None:
+        from app.agent.ctf.package import build_archive
+
+        try:
+            print(build_archive(key, args.package, strategy_path=args.strategy))
+            return 0
+        except (OSError, ValueError, SyntaxError) as exc:
+            print(f"Cannot build archive: {exc}", file=sys.stderr)
+            return 2
+    if key == "evidence":
+        from app.agent.ctf import evidence
+
+        strategy = None
+        if args.strategy is not None:
+            strategy = args.strategy.read_text(encoding="utf-8", errors="replace")
+        return evidence.main(strategy)
+    profile = get_profile(key)
+    from app.agent.ctf.runtime import run_profile
+
+    return run_profile(profile)

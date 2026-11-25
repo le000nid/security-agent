@@ -6,8 +6,7 @@ import sys
 import pytest
 
 
-@pytest.fixture(autouse=True)
-def forbid_network(monkeypatch):
+def _install_network_guard(monkeypatch):
     original_connect = socket.socket.connect
 
     def reject(*_args, **_kwargs):
@@ -28,3 +27,16 @@ def forbid_network(monkeypatch):
         raise AssertionError("Real network access is forbidden in unit tests")
 
     monkeypatch.setattr(socket.socket, "connect", reject)
+    return original_connect
+
+
+@pytest.fixture(autouse=True)
+def forbid_network(request, monkeypatch):
+    """Loopback-only integration tests opt out via @pytest.mark.local_net."""
+    if "local_net" not in request.keywords:
+        _install_network_guard(monkeypatch)
+    yield None
+
+
+# direct programmatic access for tests that verify the guard itself
+forbid_network.__wrapped__ = _install_network_guard

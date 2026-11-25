@@ -26,16 +26,19 @@ security-agent-history-audit = "app.git_history_audit:main"
 include = ["app*", "benchmark*"]
 
 [tool.setuptools.data-files]
-"share/ai-security-agent/config" = ["config/semgrep.yaml", "config/semgrep-vega-p2.yaml", "config/benchmarks.yaml", "config/nosqli-scenarios.json", "config/nosqli-profiles.yaml", "config/nosqli-sast-cases.json"]
+"share/ai-security-agent/config" = ["config/semgrep.yaml", "config/semgrep-file-exposure.yaml", "config/semgrep-arsenal.yaml", "config/benchmarks.yaml", "config/nosqli-scenarios.json", "config/nosqli-profiles.yaml", "config/nosqli-sast-cases.json"]
 "share/ai-security-agent/config/expected" = ["config/expected/*.json"]
 "share/ai-security-agent/config/nuclei" = ["config/nuclei/*.yaml"]
 
 [tool.setuptools.package-data]
-app = ["ui/templates/*.html", "ui/static/*.css", "ui/static/*.js", "vega_p1z1/run.sh", "vega_p1z1/agent.json", "vega_p1z1/strategy.md"]
+app = ["ui/templates/*.html", "ui/static/*.css", "ui/static/*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--strict-markers"
+markers = [
+    "local_net: loopback-only integration test (fake HTTP server on 127.0.0.1)",
+]
 pythonpath = ["."]
 
 [tool.ruff]

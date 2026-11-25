@@ -1,5 +1,0 @@
-{
-  "name": "security-agent-p1z1",
-  "version": "1.0.0",
-  "entrypoint": "run.sh"
-}
