@@ -30,7 +30,7 @@ def test_project_cli_runs_audit_without_dotenv_or_model(
     monkeypatch.setattr(cli, "OpenAICompatibleClient", forbidden)
     assert project_main.run(["ctf-audit", "--reports-dir", str(tmp_path)]) == 0
     summary = json.loads(capsys.readouterr().out.splitlines()[-1])
-    assert summary["cases"] == 18
+    assert summary["cases"] == 19
     assert summary["status"] == "completed_with_observations"
     reports = list(tmp_path.glob("*/ctf_audit.json"))
     assert len(reports) == 1
@@ -47,7 +47,7 @@ def test_cli_strict_mode_fails_on_observations_and_preserves_report(tmp_path, ca
         == 1
     )
     summary = json.loads(capsys.readouterr().out.splitlines()[-1])
-    assert summary["unverified_artifact_admissions"] == 6
+    assert summary["unverified_artifact_admissions"] == 3
     assert len(list(tmp_path.glob("*/ctf_audit.md"))) == 1
 
 

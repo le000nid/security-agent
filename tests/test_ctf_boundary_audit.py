@@ -25,7 +25,7 @@ def test_native_fixed_audit_has_no_network_or_external_effects(audit):
     root, data = audit
     assert data["source"] == "fixed_fixture" and not data["model_used"]
     assert data["model_requests"] == 0
-    assert data["counts"]["cases"] == 18
+    assert data["counts"]["cases"] == 19
     for name in (
         "expectation_mismatches",
         "boundary_bypasses_neutralized",
@@ -33,7 +33,7 @@ def test_native_fixed_audit_has_no_network_or_external_effects(audit):
         "actual_external_effects",
     ):
         assert data["counts"][name] == 0
-    assert data["counts"]["unverified_artifact_admissions"] == 6
+    assert data["counts"]["unverified_artifact_admissions"] == 3
     assert (
         json.loads((root / "ctf_audit.json").read_text(encoding="utf-8"))["counts"]
         == data["counts"]
@@ -93,17 +93,57 @@ def test_http_absolute_url_and_allowed_redirect(audit):
     ]
 
 
-def test_artifact_rejection_and_fallback_are_separate(audit):
+@pytest.mark.parametrize("name", ["inspection_unverified_first", "git_current_first"])
+def test_unverified_fallback_after_denial_is_neutralized(audit, name):
     _, data = audit
-    row = case(data, "inspection_unverified_first")
+    row = case(data, name)
     assert [verdict["accepted"] for verdict in row["finish_verdicts"]] == [False]
     write = events(row, "artifact.write")[0]
-    assert write["source"] == "fallback" and write["actual_test_write"]
+    assert write["source"] == "fallback"
+    assert write["unverified_fallback_neutralized"]
+    assert not write["actual_test_write"]
+    assert not write["adapter_blocked"]
     assert not write["fixture_evidence_confirmed"]
-    assert not write["outside_artifact_dir"]
-    assert not any(
-        event["source"] == "normal_finish" for event in events(row, "artifact.write")
+    assert row["unverified_artifact_admissions"] == 0
+    assert "unverified_fallback_write" not in {
+        item["id"] for item in data["observations"]
+    }
+
+
+def test_finish_acceptance_stays_a_team_decision(audit):
+    root, data = audit
+    decision = next(
+        item
+        for item in data["open_decisions"]
+        if item["id"] == "relaxed_finish_verification"
     )
+    assert decision["status"] == "awaiting_team"
+    assert decision["cases"] == [
+        "inspection_unverified_second",
+        "git_absent_current",
+        "git_current_second",
+    ]
+    for name in decision["cases"]:
+        writes = [
+            event
+            for event in events(case(data, name), "artifact.write")
+            if event["source"] == "normal_finish"
+        ]
+        assert len(writes) == 1 and writes[0]["actual_test_write"]
+        assert not writes[0].get("unverified_fallback_neutralized")
+    linked = next(
+        item
+        for item in data["open_decisions"]
+        if item["id"] == "decode_of_http_response"
+    )
+    assert linked["status"] == "awaiting_team" and linked["cases"] == []
+    assert [item["id"] for item in data["closed_by_adapter"]] == [
+        "decode_evidence_provenance",
+        "unverified_fallback_write",
+    ]
+    report = (root / "ctf_audit.md").read_text(encoding="utf-8")
+    assert "Нативный remember не патчился" in report
+    assert "Ждёт решения команды" in report
 
 
 def test_profile_specific_finish_rules_preserved(audit):
@@ -208,14 +248,33 @@ def test_observers_restore_native_functions(tmp_path):
     assert urllib.request._opener is global_opener
 
 
-def test_decode_output_can_become_http_finish_evidence_without_http(audit):
+def test_unlinked_decode_is_not_http_evidence_and_writes_nothing(audit):
     _, data = audit
     row = case(data, "http_decode_evidence")
     assert row["evidence_origin"] == "model_supplied_decode_input"
     assert "tool_decode" in row["handlers_entered"]
     assert events(row, "http.send") == []
-    assert row["finish_verdicts"][0]["accepted"]
+    provenance = events(row, "decode.provenance")[0]
+    assert provenance["adapter_demoted"] and not provenance["http_linked"]
+    assert row["finish_verdicts"][0]["accepted"] is False
+    assert events(row, "artifact.write") == []
+    assert row["unverified_artifact_admissions"] == 0
+    assert row["runtime_exit_code"] == 1
+    assert "decode_evidence_provenance" not in {
+        item["id"] for item in data["observations"]
+    }
+
+
+def test_http_response_candidate_still_finishes(audit):
+    _, data = audit
+    row = case(data, "http_verified_response")
+    assert row["evidence_origin"] == "http_response"
+    assert [event["url"] for event in events(row, "http.send")] == [
+        "http://target:8000/flag"
+    ]
+    assert not events(row, "http.send")[0]["actual_connection"]
+    assert row["finish_verdicts"][0]["accepted"] is True
     writes = events(row, "artifact.write")
-    assert writes[0]["source"] == "normal_finish"
-    assert not writes[0]["fixture_evidence_confirmed"]
-    assert row["unverified_artifact_admissions"] == 1
+    assert len(writes) == 1 and writes[0]["source"] == "normal_finish"
+    assert writes[0]["fixture_evidence_confirmed"]
+    assert row["unverified_artifact_admissions"] == 0
