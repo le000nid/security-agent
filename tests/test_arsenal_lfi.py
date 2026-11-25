@@ -76,3 +76,79 @@ def test_containment_holds_for_symlink_hop(sandbox):
 
     with pytest.raises(GuardError):
         lfi.contained_path(sandbox.base, "out_link.txt")
+
+
+# --------------------------------------------------------------------------
+# v10: комплексные цепочки и простой залп — явные проверки новых слоёв
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("vector_id", sorted(lfi._SYMLINK_VECTORS))
+def test_naive_symlink_vectors_succeed(sandbox, vector_id):
+    if not sandbox.symlinks_supported:
+        pytest.skip("symlink не поддерживается платформой")
+    attack_ok, detail = lfi.naive_run(sandbox, vector_id)
+    assert attack_ok, f"наивная реализация устояла: {detail}"
+
+
+def test_toctou_guarded_layer_is_g8(sandbox):
+    if not sandbox.symlinks_supported:
+        pytest.skip("symlink не поддерживается платформой")
+    hold_ok, layer, code = lfi.guarded_run(sandbox, "lfi_toctou_swap")
+    assert hold_ok
+    assert layer == "G8"
+    assert code == "path_swapped_between_check_and_open"
+
+
+def test_safe_open_consistent_holds_on_swap(sandbox):
+    if not sandbox.symlinks_supported:
+        pytest.skip("symlink не поддерживается платформой")
+    with pytest.raises(DefenseHold) as hold:
+        lfi.safe_open_consistent(sandbox, "report.txt")
+    assert hold.value.layer == "G8"
+
+
+def test_safe_extract_tar_rejects_parent_and_symlink_members(sandbox):
+    with pytest.raises(DefenseHold) as slip:
+        lfi.safe_extract_tar(sandbox, "evil-extract.tar")
+    assert slip.value.layer == "G9"
+    assert slip.value.code == "parent_segment_in_member"
+    if not sandbox.symlinks_supported:
+        pytest.skip("symlink не поддерживается платформой")
+    with pytest.raises(DefenseHold) as chain:
+        lfi.safe_extract_tar(sandbox, "chain.tar")
+    assert chain.value.layer == "G9"
+    assert chain.value.code == "non_regular_member"
+
+
+def test_safe_archive_member_limits_and_depth(sandbox):
+    with pytest.raises(DefenseHold) as bomb:
+        lfi.safe_archive_member(sandbox, "bomb.zip")
+    assert bomb.value.layer == "G10"
+    assert bomb.value.code == "member_size_exceeded"
+    with pytest.raises(DefenseHold) as nested:
+        lfi.safe_archive_member(sandbox, "nested.zip")
+    assert nested.value.layer == "G11"
+    assert nested.value.code == "nested_archive_forbidden"
+
+
+@pytest.mark.parametrize(
+    ("payload", "layer"),
+    [
+        ("..%2foutside%2fsecret.txt", "G2"),
+        ("%2e%2e\\outside\\secret.txt", "G2"),
+        ("．．/outside/secret.txt", "G2"),
+        ("..%00%2foutside%2fsecret.txt", "G2"),
+        ("./..%2foutside%2fsecret.txt", "G2"),
+        ("..;/outside/secret.txt", "G2"),
+        ("FILE:///etc/hostname", "G3"),
+        ("config.py~", "G4"),
+        ("config.py.old", "G4"),
+        (".config.py.swp", "G4"),
+        (".env.local", "G4"),
+    ],
+)
+def test_simple_barrage_layers(sandbox, payload, layer):
+    with pytest.raises(DefenseHold) as hold:
+        lfi.safe_file_param(sandbox, payload)
+    assert hold.value.layer == layer

@@ -1,7 +1,19 @@
-"""Домен SQLI: 14 векторов против 6 слоёв защиты на настоящей SQLite.
+"""Домен SQLI: 21 вектор против 7 слоёв защиты на настоящей SQLite.
 
-Наивная реализация песочницы — «микросервис сноркета» из четырёх операций,
-каждая со своей ловушкой:
+v10 расширяет арсенал в два направления:
+
+* **комплексные векторы** — выгрузка таблицы одним агрегатом
+  (``group_concat`` в UNION), запись копии БД в выбранное атакующим место
+  (``VACUUM INTO`` — SQL-эквивалент записи файла), рекогносцировка схемы
+  через рекурсивный CTE по ``sqlite_master``, раскрытие колонок табличной
+  pragma-функцией ``pragma_table_info`` и обход фильтра ключевых слов
+  регистром (``SeLeCt`` против фильтра, смотрящего нижний регистр);
+* **простой залп** — классическая UNION-выгрузка токенов и underscore-
+  wildcard ``_`` в поиске: обязательные «азбучные» payloads, которые
+  отсутствуют в защите так же опасны, как и экзотика.
+
+Наивная реализация песочницы — «микросервис сноркета» из операций, каждая
+со своей ловушкой:
 
 * ``naive_legacy_login`` — f-string SQL без всякой обработки (endpoint
   «оставлен для совместимости»);
@@ -11,15 +23,18 @@
 * ``naive_search`` / ``naive_list_users`` / ``naive_user_lookup`` — сырая
   интерполяция в LIKE / ORDER BY / сравнение;
 * ``naive_admin_tool`` — executescript произвольного входа (stacked
-  statements, PRAGMA, ATTACH);
+  statements, PRAGMA, ATTACH, VACUUM INTO);
+* ``naive_export`` — экспорт токенов с фильтром ключевых слов в одном
+  регистре;
 * ``naive_register``/``naive_profile`` — second-order: значение из БД
   считается доверенным и попадает в SQL без обработки.
 
 База — настоящий SQLite-файл в каталоге песочницы; каждый вектор реально
 меняет результат запроса (вход под admin, утечка токенов, запись файла
-через ATTACH). Охраняемая реализация использует параметризацию, белый
-список идентификаторов, канонизацию входа с запретом quote-класса,
-ESCAPE-маскирование LIKE и повторную проверку значений из БД.
+через ATTACH/VACUUM INTO). Охраняемая реализация использует параметризацию,
+белый список идентификаторов, канонизацию входа с запретом quote-класса,
+ESCAPE-маскирование LIKE, запрет системных объектов в выражениях и
+повторную проверку значений из БД.
 """
 
 from __future__ import annotations
@@ -69,7 +84,8 @@ LAYERS = [
         "Q3",
         "одно statement, никакой DDL из входа",
         "execute() вместо executescript(); административные операции — "
-        "фиксированный реестр, PRAGMA/ATTACH/CREATE из входа недостижимы",
+        "фиксированный реестр, PRAGMA/ATTACH/CREATE/VACUUM INTO из входа "
+        "недостижимы",
     ),
     Layer(
         "Q4",
@@ -88,6 +104,13 @@ LAYERS = [
         "повторная проверка значений из БД",
         "second-order: значение, прочитанное из базы, перед повторным "
         "использованием в SQL проходит те же проверки, что и вход",
+    ),
+    Layer(
+        "Q7",
+        "запрет системных объектов в выражениях",
+        "выражения, попадающие в SQL-конструкции, не могут ссылаться на "
+        "sqlite_master, pragma_-функции и административные операции — "
+        "рекогносцировка схемы и выгрузка метаданных недостижимы",
     ),
 ]
 
@@ -191,6 +214,59 @@ VECTORS = [
         "букве за запрос",
         ("Q4", "Q1", "Q5"),
     ),
+    # --- комплексные векторы (v10) --------------------------------------------
+    Vector(
+        "sqli_group_concat_dump",
+        "выгрузка таблицы одним агрегатом",
+        "CWE-89",
+        "group_concat в UNION сливает всю таблицу токенов в одну строку результата",
+        ("Q4", "Q1"),
+    ),
+    Vector(
+        "sqli_vacuum_into_write",
+        "запись копии БД через VACUUM INTO",
+        "CWE-89",
+        "VACUUM INTO пишет копию базы в путь, выбранный атакующим — "
+        "SQL-эквивалент записи файла",
+        ("Q3",),
+    ),
+    Vector(
+        "sqli_recursive_cte_recon",
+        "рекогносцировка схемы через рекурсивный CTE",
+        "CWE-89",
+        "рекурсивный CTE по sqlite_master перечисляет всю схему в одном "
+        "запросе без единой кавычки",
+        ("Q7", "Q1"),
+    ),
+    Vector(
+        "sqli_pragma_tableval_recon",
+        "раскрытие колонок pragma-функцией",
+        "CWE-89",
+        "pragma_table_info('users') как табличная функция отдаёт имена и типы колонок",
+        ("Q4", "Q7"),
+    ),
+    Vector(
+        "sqli_keyword_case_bypass",
+        "обход фильтра ключевых слов регистром",
+        "CWE-89",
+        "SeLeCt/UNION проходят фильтр, сверяющий нижний регистр",
+        ("Q4", "Q1"),
+    ),
+    # --- простой залп (v10) ---------------------------------------------------
+    Vector(
+        "sqli_union_select_exfil",
+        "классическая UNION-выгрузка токенов",
+        "CWE-89",
+        "' UNION SELECT token, 'x' FROM tokens-- выносит токены через логин",
+        ("Q4", "Q1"),
+    ),
+    Vector(
+        "sqli_like_underscore_wildcard",
+        "underscore-wildcard в поиске",
+        "CWE-89",
+        "одиночный _ в LIKE-поиске возвращает все заметки, включая секретную",
+        ("Q5",),
+    ),
 ]
 
 SQLI_OPS_ALLOWED = ("journal_mode", "vacuum")
@@ -199,6 +275,22 @@ _SQL_QUOTE_CLASS = ("'", '"', "`", ";")
 _SQL_LITERAL_PATTERNS = (
     re.compile(r"\bx'[0-9a-fA-F]*'", re.IGNORECASE),
     re.compile(r"\bchar\s*\(", re.IGNORECASE),
+)
+# Q7: системные объекты и административные операции в выражениях из входа
+_SQL_SYSTEM_PATTERN = re.compile(
+    r"\bsqlite_master\b|\bpragma_[a-z_]+\b|\battach\b|\bvacuum\b",
+    re.IGNORECASE,
+)
+# наивный фильтр экспорта: сверяет только нижний регистр — ловушка
+_EXPORT_BANNED = (
+    "select",
+    "union",
+    "pragma",
+    "attach",
+    "vacuum",
+    "drop",
+    "--",
+    "/*",
 )
 
 
@@ -211,7 +303,8 @@ _SQL_LITERAL_PATTERNS = (
 class SqliSandbox:
     conn: sqlite3.Connection
     outside_db: Path
-    payloads: dict[str, str]
+    exfil_db: Path
+    payloads: dict[str, dict[str, str]]
     _temp: TemporaryDirectory | None = None
 
     def __enter__(self) -> "SqliSandbox":
@@ -290,10 +383,37 @@ def build_context() -> SqliSandbox:
                 "x' OR (SELECT substr(note,1,1) FROM notes WHERE name='admin') LIKE 'r"
             )
         },
+        "sqli_group_concat_dump": {
+            "u": ("' UNION SELECT group_concat(owner||':'||token), 'x' FROM tokens--"),
+            "p": "irrelevant",
+        },
+        "sqli_vacuum_into_write": {
+            "script": f"VACUUM INTO '{(outside / 'arsenal_exfil.db').as_posix()}'"
+        },
+        "sqli_recursive_cte_recon": {
+            "expr": (
+                "(WITH RECURSIVE t(n) AS (SELECT name FROM sqlite_master "
+                "UNION SELECT n FROM t) SELECT group_concat(n) FROM t)"
+            )
+        },
+        "sqli_pragma_tableval_recon": {
+            "expr": (
+                "(SELECT group_concat(name||':'||type) FROM pragma_table_info('users'))"
+            )
+        },
+        "sqli_keyword_case_bypass": {
+            "q": "x' UNION SeLeCt token, 'x' FROM tokens WHERE owner!='x"
+        },
+        "sqli_union_select_exfil": {
+            "u": "' UNION SELECT token, 'x' FROM tokens--",
+            "p": "irrelevant",
+        },
+        "sqli_like_underscore_wildcard": {"term": "_"},
     }
     return SqliSandbox(
         conn=conn,
         outside_db=outside / "arsenal_pwned.db",
+        exfil_db=outside / "arsenal_exfil.db",
         payloads=payloads,
         _temp=temp,
     )
@@ -357,6 +477,14 @@ def naive_user_lookup(ctx: SqliSandbox, expr: str) -> tuple | None:
     return ctx.conn.execute(sql).fetchone()
 
 
+def naive_export(ctx: SqliSandbox, q: str) -> list[tuple]:
+    for word in _EXPORT_BANNED:
+        if word in q:  # ловушка: фильтр сверяет только нижний регистр
+            raise NaiveRejected("keyword_filter")
+    sql = f"SELECT token, owner FROM tokens WHERE owner='{q}'"
+    return ctx.conn.execute(sql).fetchall()
+
+
 def naive_run(ctx: SqliSandbox, vector_id: str) -> tuple[bool, str]:
     payload = ctx.payloads[vector_id]
     if vector_id in {
@@ -371,13 +499,17 @@ def naive_run(ctx: SqliSandbox, vector_id: str) -> tuple[bool, str]:
         row = naive_login(ctx, payload["u"], payload["p"])
         ok = row is not None and row[0] == ADMIN_NAME
         return ok, f"вход как {row[0]}" if ok else "вход не удался"
+    if vector_id in {"sqli_union_select_exfil", "sqli_group_concat_dump"}:
+        row = naive_legacy_login(ctx, payload["u"], payload["p"])
+        ok = row is not None and ADMIN_TOKEN in str(row)
+        return ok, f"токены вынесены UNION'ом: {row}" if ok else "утечки нет"
     if vector_id == "sqli_second_order_stored":
         naive_register(ctx, payload["name"])
         rows = naive_profile(ctx, payload["name"])
         tokens = {r[0] for r in rows or []}
         ok = ADMIN_TOKEN in tokens and len(tokens) >= 2
         return ok, f"утечка токенов: {len(tokens or [])} строк" if ok else "утечки нет"
-    if vector_id == "sqli_like_wildcard_disclosure":
+    if vector_id in {"sqli_like_wildcard_disclosure", "sqli_like_underscore_wildcard"}:
         rows = naive_search(ctx, payload["term"])
         leaked = any(NOTE_SECRET in r[1] for r in rows)
         return leaked, f"получено заметок: {len(rows)}" if leaked else "утечки нет"
@@ -394,6 +526,10 @@ def naive_run(ctx: SqliSandbox, vector_id: str) -> tuple[bool, str]:
         naive_admin_tool(ctx, payload["script"])
         ok = ctx.outside_db.is_file()
         return ok, "файл создан за пределами БД" if ok else "файла нет"
+    if vector_id == "sqli_vacuum_into_write":
+        naive_admin_tool(ctx, payload["script"])
+        ok = ctx.exfil_db.is_file()
+        return ok, "копия БД записана в выбранное место" if ok else "файла нет"
     if vector_id in {"sqli_hex_blob_smuggle", "sqli_char_runtime_string"}:
         row = naive_user_lookup(ctx, payload["expr"])
         ok = row is not None and row[0] == ADMIN_NAME
@@ -402,6 +538,21 @@ def naive_run(ctx: SqliSandbox, vector_id: str) -> tuple[bool, str]:
         row = naive_user_lookup(ctx, payload["expr"])
         ok = row is not None and NOTE_SECRET in str(row)
         return ok, "пароль администратора в выдаче" if ok else "секрета нет"
+    if vector_id == "sqli_recursive_cte_recon":
+        row = naive_user_lookup(ctx, payload["expr"])
+        ok = row is not None and "tokens" in str(row)
+        return ok, "схема перечислена рекурсивным CTE" if ok else "перечисления нет"
+    if vector_id == "sqli_pragma_tableval_recon":
+        row = naive_user_lookup(ctx, payload["expr"])
+        ok = row is not None and "pass" in str(row)
+        return (
+            ok,
+            "колонки раскрыты pragma-функцией" if ok else "раскрытия нет",
+        )
+    if vector_id == "sqli_keyword_case_bypass":
+        rows = naive_export(ctx, payload["q"])
+        ok = any(ADMIN_TOKEN in r[0] for r in rows)
+        return ok, f"экспорт вернул {len(rows)} строк" if ok else "утечки нет"
     if vector_id == "sqli_boolean_blind_substr":
         rows_yes = naive_search(ctx, payload["term"])
         rows_no = naive_search(ctx, payload["term"].replace("LIKE 'r", "LIKE 'Z"))
@@ -426,6 +577,14 @@ def safe_sql_text(value: str) -> str:
     for pattern in _SQL_LITERAL_PATTERNS:
         if pattern.search(v):
             raise DefenseHold("Q4", "encoded_literal_construction")
+    return v
+
+
+def safe_sql_expr(value: str) -> str:
+    """Q4 + Q7: канонизация выражения и запрет системных объектов в нём."""
+    v = safe_sql_text(value)
+    if _SQL_SYSTEM_PATTERN.search(v):
+        raise DefenseHold("Q7", "system_object_in_expression")
     return v
 
 
@@ -492,11 +651,15 @@ def guarded_run(ctx: SqliSandbox, vector_id: str) -> tuple[bool, str, str]:
             "sqli_classic_tautology",
             "sqli_comment_auth_bypass",
             "sqli_inline_comment_split",
+            "sqli_union_select_exfil",
+            "sqli_group_concat_dump",
         }:
             # Q1: legacy-эндпоинт удалён; единственный вход — параметризованный
             row = guarded_login(ctx, payload["u"], payload["p"])
             if row is not None and row[0] == ADMIN_NAME:
                 return False, "", "охраняемый логин пропустил обход"
+            if row is not None and ADMIN_TOKEN in str(row):
+                return False, "", "охраняемый логин пропустил UNION-выгрузку"
             return True, "Q1", "вход не выполнен: параметризация + канонизация"
         if vector_id in {"sqli_decode_after_filter", "sqli_nfkc_fullwidth_quote"}:
             guarded_login(ctx, payload["u"], payload["p"])
@@ -505,22 +668,35 @@ def guarded_run(ctx: SqliSandbox, vector_id: str) -> tuple[bool, str, str]:
             guarded_register(ctx, payload["name"])
             guarded_profile(ctx, payload["name"])
             return True, "Q6", "значение из БД перепроверено"
-        if vector_id in {"sqli_like_wildcard_disclosure", "sqli_boolean_blind_substr"}:
+        if vector_id in {
+            "sqli_like_wildcard_disclosure",
+            "sqli_boolean_blind_substr",
+            "sqli_like_underscore_wildcard",
+        }:
             guarded_search(ctx, payload["term"])
             return True, "Q5", "wildcards замаскированы ESCAPE"
         if vector_id == "sqli_order_by_case_blind":
             guarded_list_users(ctx, payload["sort"])
             return True, "Q2", "сортировка только по allowlist"
-        if vector_id in {"sqli_pragma_recon", "sqli_attach_file_write"}:
+        if vector_id in {
+            "sqli_pragma_recon",
+            "sqli_attach_file_write",
+            "sqli_vacuum_into_write",
+        }:
             guarded_admin(ctx, payload["script"])
             return True, "Q3", "операция вне фиксированного реестра"
+        if vector_id == "sqli_keyword_case_bypass":
+            safe_sql_expr(payload["q"])
+            return True, "Q1", "эндпоинт экспорта удалён"
         if vector_id in {
             "sqli_hex_blob_smuggle",
             "sqli_char_runtime_string",
             "sqli_cte_exfil",
+            "sqli_recursive_cte_recon",
+            "sqli_pragma_tableval_recon",
         }:
-            # Q1: эндпоинт сырых выражений удалён; что осталось — отвергает Q4
-            safe_sql_text(payload["expr"])
+            # Q1: эндпоинт сырых выражений удалён; Q4/Q7 отвергают payload
+            safe_sql_expr(payload["expr"])
             return True, "Q1", "эндпоинт сырых выражений удалён"
     except DefenseHold as hold:
         return True, hold.layer, hold.code

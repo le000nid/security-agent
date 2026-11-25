@@ -1,4 +1,4 @@
-"""SAST-слой арсенала: пять правил CWE против target-фикстур (нужен Semgrep).
+"""SAST-слой арсенала: семь правил CWE против target-фикстур (нужен Semgrep).
 
 В отличие от код-уровня (benchmark.verify_arsenal) здесь используется
 реальный Semgrep со strict-режимом: каждое правило обязано дать находку
@@ -24,9 +24,11 @@ TARGETS = (
 EXPECTED = {
     ("targets/arsenal-lfi/vulnerable.py", "arsenal-python-open-concat"),
     ("targets/arsenal-lfi/vulnerable.py", "arsenal-python-join-open-write"),
+    ("targets/arsenal-lfi/vulnerable.py", "arsenal-python-extractall-unfiltered"),
     ("targets/arsenal-rfi/vulnerable.py", "arsenal-python-urlopen-variable"),
     ("targets/arsenal-sqli/vulnerable.py", "arsenal-python-stringbuilt-sql"),
     ("targets/arsenal-sqli/vulnerable.py", "arsenal-python-executescript-input"),
+    ("targets/arsenal-sqli/vulnerable.py", "arsenal-python-vacuum-into-built"),
 }
 BENIGN_PATHS = (
     "targets/arsenal-lfi/benign.py",
@@ -89,7 +91,7 @@ def main() -> None:
             f"arsenal SAST drift: missing {EXPECTED - actual}, "
             f"unexpected {actual - EXPECTED}"
         )
-    print("Arsenal SAST passed: 5 CWE rules, 5 findings in vulnerable, 0 in benign")
+    print("Arsenal SAST passed: 7 CWE rules, 7 findings in vulnerable, 0 in benign")
 
 
 if __name__ == "__main__":

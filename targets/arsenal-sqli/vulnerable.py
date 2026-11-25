@@ -21,3 +21,11 @@ def batch_tool():
     conn = sqlite3.connect("app.db")
     conn.executescript(script)
     return {"status": "executed"}
+
+
+@app.route("/backup")
+def backup_tool():
+    path = request.args.get("path", "")
+    query = f"VACUUM INTO '{path}'"
+    sqlite3.connect("app.db").execute(query)
+    return {"status": "backed up"}

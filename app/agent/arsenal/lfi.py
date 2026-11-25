@@ -1,17 +1,32 @@
-"""Домен LFI: 14 векторов против 7 слоёв защиты.
+"""Домен LFI: 31 вектор против 11 слоёв защиты.
+
+v10 расширяет арсенал в два направления:
+
+* **комплексные цепочки** — многошаговые атаки, где обход строится из
+  нескольких примитивов: TOCTOU (проверка до подмены, открытие после),
+  escape через ``extractall`` без фильтра, symlink-член внутри TAR с записью
+  через него, zip-бомба (амплификация 1000x) и вложенный архив
+  (zip-in-zip с ``../`` во внутреннем члене);
+* **простой залп** — максимально широкий набор тривиальных написаний одного
+  и того же обхода (одиночное кодирование слэша, кодированные точки с сырым
+  обратным слэшем, полноширинные точки с ASCII-слэшем, percent-encoded
+  полноширинные, NUL-зачистка, префикс ``./``, сырая точка с запятой,
+  uppercase-обёртка ``FILE://``, семейство резервных копий ``~``/``.old``/
+  ``.swp`` и вариант ``.env.local``): враг мог не предусмотреть любую из
+  простых форм, поэтому арсенал проверяет их по отдельности.
 
 Наивная реализация песочницы — «файловый сервис» с типовым набором ловушек,
 которые реально встречаются в коде: зачистка сырого вида до декодирования,
 один проход percent-декодирования, зачистка ``;`` и NUL, NFKC-нормализация
 и замена ``\\`` на ``/`` ПОСЛЕ проверок, раскрытие переменных окружения,
 второй «legacy» проход декодирования, ручное извлечение членов архивов,
-«URL-осведомлённый» читатель и glob-перечисление. Каждый вектор обходит
-ровно одну такую ловушку и читает файл за пределами базы.
+``extractall`` без фильтра, «URL-осведомлённый» читатель и glob-перечисление.
 
 Охраняемая реализация строит путь через те же примитивы, что и
 ``app.http_guard`` (полное декодирование, канонические сегменты, белый
-список, контейнерность после realpath) и запрещает обёртки, членов
-архивов, glob-метасимволы, dot-файлы и резервные копии.
+список, контейнерность после realpath), запрещает обёртки, членов архивов,
+glob-метасимволы, dot-файлы и резервные копии, а архивы обрабатывает
+поштучно с проверкой каждого члена и лимитами амплитуды.
 """
 
 from __future__ import annotations
@@ -45,6 +60,13 @@ BACKUP_SECRET = "BACKUP-CONFIG-SECRET"
 OUTSIDE_SECRET = "ARSENAL-OUTSIDE-SECRET"
 ZIP_MARKER = "ZIP-ESCAPE-OK"
 TAR_MARKER = "TAR-ESCAPE-OK"
+EXTRACT_MARKER = "EXTRACT-SLIP-OK"
+TAR_CHAIN_MARKER = "TAR-CHAIN-OK"
+NESTED_MARKER = "NESTED-ESCAPE-OK"
+
+_BOMB_MEMBER_BYTES = 8_000_000
+_MAX_MEMBER_BYTES = 1_000_000
+_MAX_ARCHIVE_RATIO = 100
 
 # --------------------------------------------------------------------------
 # Слои защиты (охраняемая реализация)
@@ -73,7 +95,7 @@ LAYERS = [
         "G4",
         "белый список сегментов",
         "сегменты только [A-Za-z0-9._-]; dot-файлы и суффиксы вне "
-        "разрешённых (.bak, .old, .env) отклоняются",
+        "разрешённых (.bak, .old, .env, ~, .swp) отклоняются",
     ),
     Layer(
         "G5",
@@ -92,6 +114,30 @@ LAYERS = [
         "заморозка порядка",
         "после валидации каноническая форма не мутирует; относительный "
         "результат перепроверяется теми же правилами",
+    ),
+    Layer(
+        "G8",
+        "согласованность открытия",
+        "файл идентифицируется до открытия и сверяется после (stat/fstat): "
+        "подмена пути между проверкой и чтением обнаруживается",
+    ),
+    Layer(
+        "G9",
+        "санитизированная распаковка",
+        "члены архивов извлекаются поштучно: родительские сегменты и "
+        "не-регулярные члены (symlink/hardlink/dev/fifo) отвергаются до записи",
+    ),
+    Layer(
+        "G10",
+        "лимиты амплитуды",
+        "размер члена архива и коэффициент сжатия ограничены; потоковое "
+        "чтение обрывается на лимите (zip-бомбы не проходят)",
+    ),
+    Layer(
+        "G11",
+        "глубина вложенности",
+        "архив внутри архива запрещён: рекурсивная распаковка недостижима "
+        "и не может вынести обход вглубь цепочки",
     ),
 ]
 
@@ -195,10 +241,138 @@ VECTORS = [
         "шаблон * в файловом параметре перечисляет содержимое базы",
         ("G3", "G4"),
     ),
+    # --- комплексные цепочки (v10) -------------------------------------------
+    Vector(
+        "lfi_toctou_swap",
+        "TOCTOU: подмена между проверкой и открытием",
+        "CWE-367",
+        "валидатор видит легитимный файл, атакующий меняет его на symlink, "
+        "открытие следует ссылке наружу",
+        ("G8",),
+    ),
+    Vector(
+        "lfi_tar_extractall_slip",
+        "escape через extractall без фильтра",
+        "CWE-23",
+        "extractall доверяет члену ../name и пишет за пределы каталога",
+        ("G9",),
+    ),
+    Vector(
+        "lfi_tar_symlink_chain",
+        "symlink-член внутри TAR и запись через него",
+        "CWE-59",
+        "архив несёт ссылку наружу и файл «сквозь» неё: распаковка "
+        "перезаписывает внешний файл",
+        ("G9",),
+    ),
+    Vector(
+        "lfi_zip_bomb_amplification",
+        "zip-бомба: амплификация при чтении",
+        "CWE-409",
+        "член в 8 МБ из нулей сжимается до килобайт; чтение без лимитов "
+        "амплифицирует ответ в 1000 раз",
+        ("G10",),
+    ),
+    Vector(
+        "lfi_nested_archive_chain",
+        "вложенный архив: zip внутри zip",
+        "CWE-23",
+        "рекурсивная распаковка переносит ../-члена во внутренний слой, где "
+        "внешние проверки уже не действуют",
+        ("G11",),
+    ),
+    # --- простой залп (v10) ---------------------------------------------------
+    Vector(
+        "lfi_single_encoded_slash",
+        "одиночное кодирование слэша",
+        "CWE-22",
+        "простое ..%2f — забыли один процент: сырой фильтр слэша не видит",
+        ("G1", "G2"),
+    ),
+    Vector(
+        "lfi_encoded_dots_raw_backslash",
+        "кодированные точки, сырой обратный слэш",
+        "CWE-22",
+        "%2e%2e\\ — точки спрятаны, разделитель оставлен как есть",
+        ("G2",),
+    ),
+    Vector(
+        "lfi_fullwidth_dots_ascii_slash",
+        "полноширинные точки с ASCII-слэшем",
+        "CWE-22",
+        "．．/ — юникод-точки проходят «чистые имена», ASCII-слэш остаётся",
+        ("G2",),
+    ),
+    Vector(
+        "lfi_percent_encoded_fullwidth",
+        "percent-encoded полноширинные символы",
+        "CWE-22",
+        "%ef%bc%8e%ef%bc%8e%ef%bc%8f декодируется и NFKC собирает ../",
+        ("G1", "G2"),
+    ),
+    Vector(
+        "lfi_null_byte_strip_reassembly",
+        "NUL-зачистка собирает обход обратно",
+        "CWE-22",
+        "зачистка \\x00 вместо обрыва склеивает ..\\x00/ в ../",
+        ("G2",),
+    ),
+    Vector(
+        "lfi_dot_slash_prefix",
+        "префикс ./ маскирует обход",
+        "CWE-22",
+        "./..%2f — ведущий сегмент уводит payload от сырых фильтров",
+        ("G2",),
+    ),
+    Vector(
+        "lfi_semicolon_raw",
+        "сырая точка с запятой",
+        "CWE-22",
+        "..;/ без кодирования: зачистка ; после декодирования строит ../",
+        ("G2",),
+    ),
+    Vector(
+        "lfi_file_uri_uppercase",
+        "uppercase-обёртка FILE://",
+        "CWE-22",
+        "FILE:// — фильтры смотрят нижний регистр, URL-читатель схему принимает",
+        ("G3",),
+    ),
+    Vector(
+        "lfi_backup_tilde",
+        "tilde-резервная копия",
+        "CWE-538",
+        "config.py~ от редактора доступен напрямую",
+        ("G4",),
+    ),
+    Vector(
+        "lfi_backup_old",
+        "резервная копия .old",
+        "CWE-538",
+        "config.py.old с прежней конфигурацией и секретами",
+        ("G4",),
+    ),
+    Vector(
+        "lfi_backup_swp",
+        "swap-файл редактора",
+        "CWE-538",
+        ".config.py.swp содержит исходник с секретами",
+        ("G4",),
+    ),
+    Vector(
+        "lfi_dotenv_variant",
+        "вариант окружения .env.local",
+        "CWE-538",
+        ".env.local с секретами читается как и .env",
+        ("G4",),
+    ),
 ]
 
 _SEGMENT_CHARSET = re.compile(r"[A-Za-z0-9._-]+\Z")
 _ALLOWED_SUFFIXES = {".txt", ".md", ".log", ".json", ".csv", ".zip", ".tar"}
+
+# векторы, требующие возможности создавать symlink (POSIX или права на Windows)
+_SYMLINK_VECTORS = {"lfi_symlink_hop", "lfi_toctou_swap", "lfi_tar_symlink_chain"}
 
 
 # --------------------------------------------------------------------------
@@ -212,6 +386,7 @@ class LfiSandbox:
     outside: Path
     payloads: dict[str, str] = field(default_factory=dict)
     symlinks_supported: bool = True
+    dir_links_supported: bool = True
     _temp: TemporaryDirectory | None = None
     _env_name: str = "ARSENAL_OUTSIDE_DIR"
 
@@ -224,8 +399,13 @@ class LfiSandbox:
         self.outside.mkdir(parents=True)
         (self.base / "secret.txt").write_text(INSIDE_SECRET, encoding="utf-8")
         (self.base / ".env").write_text(DOTENV_SECRET, encoding="utf-8")
+        (self.base / ".env.local").write_text(DOTENV_SECRET, encoding="utf-8")
         (self.base / "notes.md").write_text("# заметки сервиса\n", encoding="utf-8")
         (self.base / "config.py.bak").write_text(BACKUP_SECRET, encoding="utf-8")
+        (self.base / "config.py~").write_text(BACKUP_SECRET, encoding="utf-8")
+        (self.base / "config.py.old").write_text(BACKUP_SECRET, encoding="utf-8")
+        (self.base / ".config.py.swp").write_text(BACKUP_SECRET, encoding="utf-8")
+        (self.base / "report.txt").write_text("REPORT-MARKER", encoding="utf-8")
         (self.base / "logs" / "app.log").write_text(
             "service log line\n", encoding="utf-8"
         )
@@ -237,10 +417,37 @@ class LfiSandbox:
             payload = TAR_MARKER.encode("utf-8")
             info.size = len(payload)
             tf.addfile(info, io.BytesIO(payload))
+        with tarfile.open(self.base / "evil-extract.tar", "w") as tf:
+            payload = EXTRACT_MARKER.encode("utf-8")
+            info = tarfile.TarInfo("../arsenal_extract_escape.txt")
+            info.size = len(payload)
+            tf.addfile(info, io.BytesIO(payload))
+        with tarfile.open(self.base / "chain.tar", "w") as tf:
+            link = tarfile.TarInfo("lnk")
+            link.type = tarfile.SYMTYPE
+            link.linkname = "../outside"
+            tf.addfile(link)
+            payload = TAR_CHAIN_MARKER.encode("utf-8")
+            info = tarfile.TarInfo("lnk/chain_write.txt")
+            info.size = len(payload)
+            tf.addfile(info, io.BytesIO(payload))
+        with zipfile.ZipFile(self.base / "bomb.zip", "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("bomb.bin", "\x00" * _BOMB_MEMBER_BYTES)
+        inner = io.BytesIO()
+        with zipfile.ZipFile(inner, "w") as zf:
+            zf.writestr("../arsenal_nested_escape.txt", NESTED_MARKER)
+        with zipfile.ZipFile(self.base / "nested.zip", "w") as zf:
+            zf.writestr("inner.zip", inner.getvalue())
         try:
             os.symlink(self.outside / "secret.txt", self.base / "out_link.txt")
         except (OSError, NotImplementedError):
             self.symlinks_supported = False
+        try:
+            os.symlink(
+                self.outside, self.base / "out_dlink.txt", target_is_directory=True
+            )
+        except (OSError, NotImplementedError):
+            self.dir_links_supported = False
         os.environ[self._env_name] = str(self.outside)
         self._build_payloads()
         return self
@@ -271,13 +478,61 @@ class LfiSandbox:
             "lfi_dotfile_exposure": ".env",
             "lfi_backup_file_exposure": "config.py.bak",
             "lfi_glob_enumeration": "*",
+            "lfi_toctou_swap": "report.txt",
+            "lfi_tar_extractall_slip": "evil-extract.tar",
+            "lfi_tar_symlink_chain": "chain.tar",
+            "lfi_zip_bomb_amplification": "bomb.zip",
+            "lfi_nested_archive_chain": "nested.zip",
+            "lfi_single_encoded_slash": "..%2foutside%2fsecret.txt",
+            "lfi_encoded_dots_raw_backslash": "%2e%2e\\outside\\secret.txt",
+            "lfi_fullwidth_dots_ascii_slash": "．．/outside/secret.txt",
+            "lfi_percent_encoded_fullwidth": (
+                "%ef%bc%8e%ef%bc%8e%ef%bc%8foutside%ef%bc%8fsecret.txt"
+            ),
+            "lfi_null_byte_strip_reassembly": "..%00%2foutside%2fsecret.txt",
+            "lfi_dot_slash_prefix": "./..%2foutside%2fsecret.txt",
+            "lfi_semicolon_raw": "..;/outside/secret.txt",
+            "lfi_file_uri_uppercase": (self.outside / "secret.txt")
+            .as_uri()
+            .replace("file://", "FILE://", 1),
+            "lfi_backup_tilde": "config.py~",
+            "lfi_backup_old": "config.py.old",
+            "lfi_backup_swp": ".config.py.swp",
+            "lfi_dotenv_variant": ".env.local",
         }
 
     def unavailable(self) -> set[str]:
-        return set() if self.symlinks_supported else {"lfi_symlink_hop"}
+        skip: set[str] = set()
+        if not self.symlinks_supported:
+            skip |= set(_SYMLINK_VECTORS)
+        if not self.dir_links_supported:
+            # dir-ссылка не создаётся — цепочка «ссылка + запись сквозь неё»
+            skip.add("lfi_tar_symlink_chain")
+        return skip
+
+    def reset_report(self) -> None:
+        """Вернуть report.txt к регулярному файлу (стартовая точка атаки)."""
+        target = self.base / "report.txt"
+        if target.is_symlink():
+            target.unlink()
+            target.write_text("REPORT-MARKER", encoding="utf-8")
+
+    def swap_report(self) -> None:
+        """Атакующий меняет report.txt на symlink наружу (и обратно).
+
+        Переключатель нужен, чтобы наивная и охраняемая ветки получали
+        одинаковую стартовую точку: каждая вызывает подмену ровно один раз.
+        """
+        target = self.base / "report.txt"
+        if target.is_symlink():
+            target.unlink()
+            target.write_text("REPORT-MARKER", encoding="utf-8")
+            return
+        target.unlink(missing_ok=True)
+        os.symlink(self.outside / "secret.txt", target)
 
     def judge(self, vector_id: str, value: str, data: str) -> tuple[bool, str]:
-        if vector_id in {
+        outside_readers = {
             "lfi_semicolon_interrupt",
             "lfi_double_decode",
             "lfi_filter_before_decode",
@@ -287,7 +542,17 @@ class LfiSandbox:
             "lfi_env_var_expansion",
             "lfi_symlink_hop",
             "lfi_file_uri_wrapper",
-        }:
+            "lfi_single_encoded_slash",
+            "lfi_encoded_dots_raw_backslash",
+            "lfi_fullwidth_dots_ascii_slash",
+            "lfi_percent_encoded_fullwidth",
+            "lfi_null_byte_strip_reassembly",
+            "lfi_dot_slash_prefix",
+            "lfi_semicolon_raw",
+            "lfi_file_uri_uppercase",
+            "lfi_toctou_swap",
+        }
+        if vector_id in outside_readers:
             return (
                 OUTSIDE_SECRET in data,
                 "наружный файл прочитан" if OUTSIDE_SECRET in data else "не тот файл",
@@ -300,12 +565,46 @@ class LfiSandbox:
             escaped = self.base.parent / "arsenal_tar_escape.txt"
             ok = escaped.is_file() and escaped.read_text(encoding="utf-8") == TAR_MARKER
             return ok, "член архива записан за базу" if ok else "записи за базу нет"
-        if vector_id == "lfi_dotfile_exposure":
+        if vector_id == "lfi_tar_extractall_slip":
+            escaped = self.base.parent / "arsenal_extract_escape.txt"
+            ok = (
+                escaped.is_file()
+                and escaped.read_text(encoding="utf-8") == EXTRACT_MARKER
+            )
+            return ok, "extractall написал за базу" if ok else "записи за базу нет"
+        if vector_id == "lfi_tar_symlink_chain":
+            ok = (self.outside / "chain_write.txt").read_text(
+                encoding="utf-8"
+            ) == TAR_CHAIN_MARKER
+            return ok, "запись через ссылку наружу выполнена" if ok else "нет записи"
+        if vector_id == "lfi_zip_bomb_amplification":
+            size = int(data) if data.isdigit() else 0
+            archive_size = (self.base / "bomb.zip").stat().st_size
+            ok = size >= _BOMB_MEMBER_BYTES and archive_size * 100 <= size
+            return (
+                ok,
+                f"амплификация {size // max(archive_size, 1)}x"
+                if ok
+                else "лимитов нет",
+            )
+        if vector_id == "lfi_nested_archive_chain":
+            escaped = self.base.parent / "arsenal_nested_escape.txt"
+            ok = (
+                escaped.is_file()
+                and escaped.read_text(encoding="utf-8") == NESTED_MARKER
+            )
+            return ok, "вложенный архив вынес запись за базу" if ok else "записи нет"
+        if vector_id in {"lfi_dotfile_exposure", "lfi_dotenv_variant"}:
             return (
                 DOTENV_SECRET in data,
-                ".env прочитан" if DOTENV_SECRET in data else "нет",
+                ".env-файл прочитан" if DOTENV_SECRET in data else "нет",
             )
-        if vector_id == "lfi_backup_file_exposure":
+        if vector_id in {
+            "lfi_backup_file_exposure",
+            "lfi_backup_tilde",
+            "lfi_backup_old",
+            "lfi_backup_swp",
+        }:
             return (
                 BACKUP_SECRET in data,
                 "резервная копия прочитана" if BACKUP_SECRET in data else "нет",
@@ -365,6 +664,63 @@ def naive_archive_member(base: Path, archive_name: str, member: str) -> str:
     return data.decode("utf-8")
 
 
+def _remove_path(path: Path) -> None:
+    """Убрать путь любого вида (ссылка, файл, пустой каталог) — для перезаписи."""
+    if path.is_symlink() or path.is_file():
+        path.unlink()
+    elif path.is_dir():
+        path.rmdir()
+
+
+def naive_extract_all(base: Path, archive_name: str) -> None:
+    """«Удобная» распаковка целиком: членам архива доверяют.
+
+    На Windows tarfile создаёт symlink-член как file-ссылку на каталог и
+    падает на makedirs при записи следующего члена «сквозь» неё; тогда
+    доводим ту же доверенную распаковку вручную — так поступают свои
+    распаковщики в реальных приложениях, уязвимость от этого не меняется.
+    """
+    try:
+        with tarfile.open(base / archive_name) as tf:
+            try:
+                tf.extractall(base, filter="fully_trusted")
+            except TypeError:  # Python < 3.11.4: параметра filter ещё нет
+                tf.extractall(base)
+            return
+    except OSError:
+        pass  # наивный «стек» не осилил свой же symlink-член — доигрываем
+    with tarfile.open(base / archive_name) as tf:
+        for member in tf.getmembers():
+            target = base / member.name
+            if member.issym():
+                _remove_path(target)  # доверенный стек перезаписывает ссылку
+                target_is_dir = (base / member.linkname).is_dir()
+                os.symlink(member.linkname, target, target_is_directory=target_is_dir)
+            elif member.isreg():
+                handle = tf.extractfile(member)
+                if handle is None:
+                    raise NaiveRejected("no_such_member")
+                # путь НЕ санитизируется: компоненты-ссылки резолвит сама ОС,
+                # поэтому пишем по фактическому (resolved) пути — ровно туда,
+                # куда легла бы запись «сквозь» ссылку
+                final = Path(os.path.realpath(target))
+                final.parent.mkdir(parents=True, exist_ok=True)
+                final.write_bytes(handle.read())
+
+
+def naive_nested_extract(base: Path, archive_name: str) -> None:
+    """Рекурсивная распаковка: архивы внутри архивов тоже «доверенные»."""
+    with zipfile.ZipFile(base / archive_name) as zf:
+        inner_bytes = zf.read("inner.zip")
+    unpacked = base / "unpacked_inner.zip"
+    unpacked.write_bytes(inner_bytes)
+    with zipfile.ZipFile(unpacked) as zf:
+        for member in zf.namelist():
+            target = base / member  # путь члена НЕ санитизируется
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(zf.read(member))
+
+
 def naive_run(ctx: LfiSandbox, vector_id: str) -> tuple[bool, str]:
     raw = ctx.payloads[vector_id]
     try:
@@ -372,6 +728,28 @@ def naive_run(ctx: LfiSandbox, vector_id: str) -> tuple[bool, str]:
     except NaiveRejected as exc:
         return False, f"отклонено наивной проверкой: {exc.code}"
     try:
+        if vector_id == "lfi_toctou_swap":
+            resolved = Path(ctx.base) / value
+            # «проверка контейнерности» выполняется до открытия...
+            if not str(resolved.resolve()).startswith(str(Path(ctx.base).resolve())):
+                raise NaiveRejected("containment_check")
+            # ...а атакующий меняет файл как раз между ними
+            ctx.swap_report()
+            data = resolved.read_text(encoding="utf-8", errors="replace")
+            return ctx.judge(vector_id, value, data)
+        if vector_id == "lfi_tar_extractall_slip":
+            naive_extract_all(Path(ctx.base), value)
+            return ctx.judge(vector_id, value, "")
+        if vector_id == "lfi_tar_symlink_chain":
+            naive_extract_all(Path(ctx.base), value)
+            return ctx.judge(vector_id, value, "")
+        if vector_id == "lfi_nested_archive_chain":
+            naive_nested_extract(Path(ctx.base), value)
+            return ctx.judge(vector_id, value, "")
+        if vector_id == "lfi_zip_bomb_amplification":
+            with zipfile.ZipFile(Path(ctx.base) / value) as zf:
+                size = len(zf.read("bomb.bin"))  # чтение без лимитов
+            return ctx.judge(vector_id, value, str(size))
         if "://" in value:
             with urlopen(value, timeout=5) as handle:  # «URL-осведомлённый» читатель
                 data = handle.read().decode("utf-8", "replace")
@@ -397,7 +775,7 @@ def naive_run(ctx: LfiSandbox, vector_id: str) -> tuple[bool, str]:
 
 
 def safe_file_param(ctx: LfiSandbox, raw: str) -> Path:
-    """Построить путь по файловому параметру, пройдя все семь слоёв."""
+    """Построить путь по файловому параметру, пройдя слои G1-G7."""
     value = fully_decode(raw)  # G1: фикс-поинт декодирования до проверок
     if "$" in value or "%" in value:  # G5: раскрытия и остаточные проценты
         raise DefenseHold("G5", "expansion_or_residual_percent")
@@ -430,8 +808,73 @@ def safe_file_param(ctx: LfiSandbox, raw: str) -> Path:
     return resolved
 
 
+def safe_open_consistent(ctx: LfiSandbox, raw: str) -> Path:
+    """Открыть файл со сверкой идентичности до и после (G8).
+
+    Атакующий (песочница) выполняет подмену ровно между stat и открытием:
+    если идентичность файла изменилась — путь был подменён, чтение запрещено.
+    """
+    ctx.reset_report()  # атака начинается с регулярного файла
+    path = safe_file_param(ctx, raw)  # G1-G7 как обычно
+    before = os.stat(path)
+    ctx.swap_report()  # окно TOCTOU: подмена между проверкой и открытием
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        after = os.fstat(fd)
+    finally:
+        os.close(fd)
+    if (before.st_dev, before.st_ino) != (after.st_dev, after.st_ino):
+        raise DefenseHold("G8", "path_swapped_between_check_and_open")
+    return path
+
+
+def _reject_dangerous_tar_member(member: tarfile.TarInfo) -> None:
+    """G9: член архива обязан быть регулярным файлом без родительских сегментов."""
+    name = member.name.replace("\\", "/")
+    if any(p == ".." for p in name.split("/")):
+        raise DefenseHold("G9", "parent_segment_in_member")
+    if not member.isreg():
+        raise DefenseHold("G9", "non_regular_member")
+
+
+def safe_extract_tar(ctx: LfiSandbox, raw: str) -> Path:
+    """Распаковка TAR поштучно: каждый член валидируется до записи (G9)."""
+    path = safe_file_param(ctx, raw)  # G1-G7 на пути самого архива
+    with tarfile.open(path) as tf:
+        for member in tf.getmembers():
+            _reject_dangerous_tar_member(member)
+    return path
+
+
+def safe_archive_member(ctx: LfiSandbox, raw: str) -> Path:
+    """Чтение ZIP с проверкой каждого члена (G9/G10/G11)."""
+    path = safe_file_param(ctx, raw)  # G1-G7 на пути архива
+    with zipfile.ZipFile(path) as zf:
+        for info in zf.infolist():
+            name = info.filename.replace("\\", "/")
+            if any(p == ".." for p in name.split("/")):
+                raise DefenseHold("G9", "parent_segment_in_member")
+            if name.lower().endswith((".zip", ".tar")):
+                raise DefenseHold("G11", "nested_archive_forbidden")
+            if info.file_size > _MAX_MEMBER_BYTES:
+                raise DefenseHold("G10", "member_size_exceeded")
+            ratio = info.file_size / max(info.compress_size, 1)
+            if ratio > _MAX_ARCHIVE_RATIO:
+                raise DefenseHold("G10", "compression_ratio_exceeded")
+    return path
+
+
 def guarded_run(ctx: LfiSandbox, vector_id: str) -> tuple[bool, str, str]:
     try:
+        if vector_id == "lfi_toctou_swap":
+            safe_open_consistent(ctx, ctx.payloads[vector_id])
+            return False, "", "охраняемая реализация прочитала подменённый файл"
+        if vector_id in {"lfi_tar_extractall_slip", "lfi_tar_symlink_chain"}:
+            safe_extract_tar(ctx, ctx.payloads[vector_id])
+            return False, "", "охраняемая распаковка допустила опасный член архива"
+        if vector_id in {"lfi_zip_bomb_amplification", "lfi_nested_archive_chain"}:
+            safe_archive_member(ctx, ctx.payloads[vector_id])
+            return False, "", "охраняемое чтение архива допустило член"
         safe_file_param(ctx, ctx.payloads[vector_id])
     except DefenseHold as hold:
         return True, hold.layer, hold.code

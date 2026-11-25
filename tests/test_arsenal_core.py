@@ -7,8 +7,8 @@ import pytest
 from app.agent import arsenal
 from app.cli import run as run_cli
 
-EXPECTED_VECTORS = {"lfi": 14, "rfi": 15, "sqli": 14}
-EXPECTED_LAYERS = {"lfi": 7, "rfi": 7, "sqli": 6}
+EXPECTED_VECTORS = {"lfi": 31, "rfi": 26, "sqli": 21}
+EXPECTED_LAYERS = {"lfi": 11, "rfi": 8, "sqli": 7}
 
 
 @pytest.mark.parametrize("category", sorted(EXPECTED_VECTORS))
@@ -45,6 +45,11 @@ def test_matrix_renders_with_all_layers(category):
         assert vector.id in text
 
 
+def test_vector_ids_unique_across_domains():
+    ids = [v.id for m in arsenal.CATEGORIES.values() for v in m.VECTORS]
+    assert len(ids) == len(set(ids))
+
+
 def test_docs_cheatsheet_lists_every_domain():
     text = arsenal.render_docs()
     for title in arsenal.CATEGORY_TITLES.values():
@@ -54,7 +59,7 @@ def test_docs_cheatsheet_lists_every_domain():
 
 def test_cli_arsenal_docs_and_campaign_exit_codes(capsys):
     assert run_cli(["arsenal", "--mode", "docs"]) == 0
-    assert "Арсенал v8" in capsys.readouterr().out
+    assert "Арсенал v10" in capsys.readouterr().out
     assert run_cli(["arsenal", "--category", "all", "--mode", "campaign"]) == 0
     out = capsys.readouterr().out
     assert "ЗАЩИТА ВПЕРЕДИ АТАКИ" in out

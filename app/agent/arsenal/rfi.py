@@ -1,23 +1,38 @@
-"""Домен RFI/SSRF: 15 векторов против 7 слоёв защиты.
+"""Домен RFI/SSRF: 26 векторов против 8 слоёв защиты.
+
+v10 расширяет арсенал в два направления:
+
+* **комплексные векторы** — IPv4-mapped IPv6 в hex-форме (``::ffff:7f00:1``
+  не содержит «127.0.0.1» и не выглядит loopback'ом), link-local с зоной
+  индекса (``fe80::a1%eth0``), цикл редиректов (клиент без лимита глубины
+  расходует переходы), доставка ``data://``-payload вторым хопом (схему
+  проверяют только на первом), суффиксная маска доверенного домена
+  (``trusted.example.attacker.example`` проходит prefix-проверку);
+* **простой залп** — короткие формы IP (``127.1``, ``127.0.1``), нулевые
+  дополнения октетов (``0177.0000.0000.0001``), короткая форма IPv6
+  (``[::0:1]``), не-unused-обработчики превью ``glob://`` и ``zip://``:
+  каждая тривиальная форма проверяется отдельно, потому что фильтр мог
+  быть рассчитан только на «каноническое» написание.
 
 Наивная реализация песочницы — три операции «интеграции с внешними
 источниками», каждая со своей ловушкой:
 
 * ``naive_avatar`` разрешает источники префиксом-«белым списком» без
-  разделителя (``startswith``), а затем слепо следует редиректам;
+  разделителя (``startswith``), а затем слепо следует редиректам (до 20
+  переходов — как curl, но без запретов);
 * ``naive_sync`` держит чёрный список приватных подсетей по подстрокам
   URL и никогда не канонизирует хост (десятичные/шестнадцатеричные/
-  восьмеричные IP, длинная форма IPv6, percent-encoded authority,
-  DNS-rebinding и redirector проходят мимо);
+  восьмеричные/короткие IP, длинная и короткая формы IPv6, IPv4-mapped,
+  percent-encoded authority, DNS-rebinding и redirector проходят мимо);
 * ``naive_preview`` сворачивает регистр и пробелы в схеме и допускает
   экзотические обработчики (data, expect, glob, zip).
 
 Весь «сеть»-слой симулирован: резолвер DNS — статическая таблица,
-редиректы — рекурсия, ни один вектор не покидает процесс.
-Охраняемая реализация прогоняет URL через семь слоёв: строгая схема,
-контроль authority, канонизация хоста с разбором IP-литералов,
-омоглиф-контроль, egress-allowlist, запрет кросс-origin редиректов
-и пин DNS-ответа.
+редиректы — рекурсия с лимитом, ни один вектор не покидает процесс.
+Охраняемая реализация прогоняет URL через восемь слоёв: строгая схема,
+контроль authority, канонизация хоста с разбором IP-литералов и
+IPv4-mapped форм, омоглиф-контроль, egress-allowlist, запрет кросс-origin
+редиректов, пин DNS-ответа и лимит глубины редиректов.
 """
 
 from __future__ import annotations
@@ -53,6 +68,9 @@ SIM_DNS = {
     SYNC_HOST: "10.0.0.42",
 }
 
+_NAIVE_REDIRECT_CAP = 20  # «как curl»: лимит есть, запретов нет
+_REDIRECT_DEPTH_LIMIT = 2  # охраняемый лимит глубины переходов
+
 LAYERS = [
     Layer(
         "R1",
@@ -70,9 +88,9 @@ LAYERS = [
     Layer(
         "R3",
         "канонизация хоста",
-        "percent-encoded/десятичный/шестнадцатеричный/восьмеричный IP и "
-        "любая форма IPv6 разбираются ipaddress'ом; приватные, loopback и "
-        "link-local диапазоны отклоняются",
+        "percent-encoded/десятичный/шестнадцатеричный/восьмеричный/короткий "
+        "IP, любая форма IPv6, IPv4-mapped и scoped-адреса разбираются "
+        "ipaddress'ом; приватные, loopback и link-local диапазоны отклоняются",
     ),
     Layer(
         "R4",
@@ -97,6 +115,12 @@ LAYERS = [
         "пин DNS-ответа",
         "домен резолвится один раз, соединение идёт на зафиксированный IP, "
         "и зафиксированный IP повторно проверяется на приватность",
+    ),
+    Layer(
+        "R8",
+        "лимит глубины редиректов",
+        "число переходов ограничено независимо от их валидности: "
+        "redirect-циклы и длинные цепочки не расходуют ресурсы клиента",
     ),
 ]
 
@@ -210,6 +234,90 @@ VECTORS = [
         "http://[fd00:ec2::254]/ — IMDSv6; чёрные списки смотрят только IPv4-подстроки",
         ("R3",),
     ),
+    # --- комплексные векторы (v10) --------------------------------------------
+    Vector(
+        "rfi_ipv4_mapped_hex",
+        "IPv4-mapped IPv6 в hex-форме",
+        "CWE-918",
+        "[::ffff:7f00:1] не содержит «127.0.0.1» и не парсится фильтрами "
+        "как loopback; канонизация раскрывает mapped-адрес",
+        ("R3",),
+    ),
+    Vector(
+        "rfi_ipv6_zone_linklocal",
+        "link-local с зоной индекса",
+        "CWE-918",
+        "[fe80::a1%25eth0] — зона после % исчезает в percent-декодировании "
+        "и не матчится хрупкими фильтрами fe80::",
+        ("R3",),
+    ),
+    Vector(
+        "rfi_redirect_loop_depth",
+        "цикл редиректов без лимита глубины",
+        "CWE-601",
+        "доверенный источник редиректит сам на себя: клиент без лимита "
+        "переходов расходует соединения и время",
+        ("R8",),
+    ),
+    Vector(
+        "rfi_redirect_to_data_hop",
+        "доставка data-payload вторым хопом",
+        "CWE-601",
+        "схему проверяют только на первом хопе; редирект доставляет "
+        "data://-payload мимо схемного allowlist",
+        ("R1", "R6"),
+    ),
+    Vector(
+        "rfi_subdomain_suffix",
+        "суффиксная маска доверенного домена",
+        "CWE-918",
+        "trusted.example.attacker.example проходит startswith-проверку: "
+        "префикс совпал, домен — атакующий",
+        ("R5",),
+    ),
+    # --- простой залп (v10) ---------------------------------------------------
+    Vector(
+        "rfi_shortform_ip_2part",
+        "короткая форма IP из двух частей",
+        "CWE-918",
+        "http://127.1/ разворачивается стеками в 127.0.0.1",
+        ("R3",),
+    ),
+    Vector(
+        "rfi_shortform_ip_3part",
+        "короткая форма IP из трёх частей",
+        "CWE-918",
+        "http://127.0.1/ разворачивается стеками в 127.0.0.1",
+        ("R3",),
+    ),
+    Vector(
+        "rfi_zero_padded_octal",
+        "нулевые дополнения октетов",
+        "CWE-918",
+        "http://0177.0000.0000.0001/ — паддинг роняет хрупкие regex-фильтры",
+        ("R3",),
+    ),
+    Vector(
+        "rfi_ipv6_shortform_zero",
+        "короткая форма IPv6 с нулевой группой",
+        "CWE-918",
+        "[::0:1] не содержит литерала ::1 и попадает в loopback",
+        ("R3",),
+    ),
+    Vector(
+        "rfi_glob_wrapper",
+        "glob:// обработчик превью",
+        "CWE-918",
+        "glob:///srv/* перечисляет файлы через неограниченный обработчик",
+        ("R1",),
+    ),
+    Vector(
+        "rfi_zip_wrapper",
+        "zip:// обработчик превью",
+        "CWE-918",
+        "zip:///etc/shadow читает архив через неограниченный обработчик",
+        ("R1",),
+    ),
 ]
 
 
@@ -240,6 +348,19 @@ def _build_payloads() -> dict[str, str]:
         "rfi_data_url": "data://text/plain;base64,QVJTRU5BTC1QQVlMT0FE",
         "rfi_expect_wrapper": "expect://id",
         "rfi_ipv6_metadata_fd00": "http://[fd00:ec2::254]/latest/meta-data/",
+        "rfi_ipv4_mapped_hex": "http://[::ffff:7f00:1]/admin",
+        "rfi_ipv6_zone_linklocal": "http://[fe80::a1%25eth0]/admin",
+        "rfi_redirect_loop_depth": f"https://{TRUSTED_HOST}/redirect",
+        "rfi_redirect_to_data_hop": (
+            f"https://{TRUSTED_HOST}/redirect?to=data://text/plain;base64,QVJTRU5BTC1QQVlMT0FE"
+        ),
+        "rfi_subdomain_suffix": f"https://{TRUSTED_HOST}.{EVIL_HOST}/avatar.png",
+        "rfi_shortform_ip_2part": "http://127.1/admin",
+        "rfi_shortform_ip_3part": "http://127.0.1/admin",
+        "rfi_zero_padded_octal": "http://0177.0000.0000.0001/admin",
+        "rfi_ipv6_shortform_zero": "http://[::0:1]/admin",
+        "rfi_glob_wrapper": "glob:///srv/*",
+        "rfi_zip_wrapper": "zip:///etc/shadow",
     }
 
 
@@ -305,7 +426,7 @@ def naive_preview(url: str) -> str:
     return naive_fetch(url, follow=False)
 
 
-def naive_fetch(url: str, follow: bool) -> str:
+def naive_fetch(url: str, follow: bool, hops: int = 0) -> str:
     v = url.strip().replace("\\", "/")  # «браузерная» совместимость
     mark = ""
     if "%0d%0a" in v.lower() or "\r" in v or "\n" in v:
@@ -332,10 +453,13 @@ def naive_fetch(url: str, follow: bool) -> str:
         host = host[1:-1]
     if "%" in host:
         host = unquote(host)  # lenient-клиент декодирует authority
+    if follow and hops >= _NAIVE_REDIRECT_CAP:
+        return f"REDIRECT-LIMIT-REACHED hops={hops}{mark}"
     if host == TRUSTED_HOST and follow and "redirect" in (parsed.path or ""):
-        return naive_fetch(_redirect_target(v), follow=True)
+        # 302 без to= — «Location: сам на себя»: клиент без лимита ходит по кругу
+        return naive_fetch(_redirect_target(v) or v, follow=True, hops=hops + 1)
     if host == "redirector.attacker.example" and follow:
-        return naive_fetch(_redirect_target(v), follow=True)
+        return naive_fetch(_redirect_target(v), follow=True, hops=hops + 1)
     ip = _resolve(host)
     return f"FETCHED ip={ip} host={host}{mark}"
 
@@ -353,6 +477,16 @@ def _resolve(host: str) -> str:
     if host.startswith("0x"):
         return str(ipaddress.ip_address(int(host, 16)))  # hex-литерал
     parts = host.split(".")
+    if len(parts) == 2 and all(p.isdigit() for p in parts):
+        # короткая форма a.b: старшие октеты a, младшие b
+        return str(ipaddress.ip_address(int(parts[0]) << 24 | int(parts[1])))
+    if len(parts) == 3 and all(p.isdigit() for p in parts):
+        # короткая форма a.b.c: c занимает два младших октета
+        return str(
+            ipaddress.ip_address(
+                int(parts[0]) << 24 | int(parts[1]) << 16 | int(parts[2])
+            )
+        )
     if len(parts) == 4 and all(
         p.isdigit() and (len(p) == 1 or p.startswith("0")) for p in parts
     ):
@@ -368,6 +502,9 @@ NAIVE_OPS = {
     "rfi_trusted_redirect_hop": naive_avatar,
     "rfi_tab_authority": naive_avatar,
     "rfi_crlf_inject": naive_avatar,
+    "rfi_redirect_loop_depth": naive_avatar,
+    "rfi_redirect_to_data_hop": naive_avatar,
+    "rfi_subdomain_suffix": naive_avatar,
     "rfi_ipv6_loopback_longform": naive_sync,
     "rfi_decimal_ip": naive_sync,
     "rfi_hex_ip": naive_sync,
@@ -376,9 +513,17 @@ NAIVE_OPS = {
     "rfi_dns_rebind": naive_sync,
     "rfi_redirector_hop": naive_sync,
     "rfi_ipv6_metadata_fd00": naive_sync,
+    "rfi_ipv4_mapped_hex": naive_sync,
+    "rfi_ipv6_zone_linklocal": naive_sync,
+    "rfi_shortform_ip_2part": naive_sync,
+    "rfi_shortform_ip_3part": naive_sync,
+    "rfi_zero_padded_octal": naive_sync,
+    "rfi_ipv6_shortform_zero": naive_sync,
     "rfi_scheme_case_space": naive_preview,
     "rfi_data_url": naive_preview,
     "rfi_expect_wrapper": naive_preview,
+    "rfi_glob_wrapper": naive_preview,
+    "rfi_zip_wrapper": naive_preview,
 }
 
 HIT_MARKERS = {
@@ -397,6 +542,26 @@ HIT_MARKERS = {
     "rfi_data_url": ("DATA-PREVIEW: ARSENAL-PAYLOAD", "payload доставлен без egress"),
     "rfi_expect_wrapper": ("RCE-SIM: id", "команда исполнена симулятором"),
     "rfi_ipv6_metadata_fd00": ("ip=fd00:ec2::254", "IMDSv6 достигнут"),
+    "rfi_ipv4_mapped_hex": ("ip=::ffff:", "IPv4-mapped loopback достигнут"),
+    "rfi_ipv6_zone_linklocal": ("ip=fe80::a1%eth0", "link-local с зоной достигнут"),
+    "rfi_redirect_loop_depth": (
+        "REDIRECT-LIMIT-REACHED",
+        "клиент выжег весь лимит переходов на цикле",
+    ),
+    "rfi_redirect_to_data_hop": (
+        "DATA-PREVIEW: ARSENAL-PAYLOAD",
+        "второй хоп доставил data-payload",
+    ),
+    "rfi_subdomain_suffix": (EVIL_HOST, "суффиксная маска уводит на attacker"),
+    "rfi_shortform_ip_2part": (f"ip={LOOPBACK_IP}", "короткая форма 127.1 -> loopback"),
+    "rfi_shortform_ip_3part": (
+        f"ip={LOOPBACK_IP}",
+        "трёхчастная форма 127.0.1 -> loopback",
+    ),
+    "rfi_zero_padded_octal": (f"ip={LOOPBACK_IP}", "паддинг октетов -> loopback"),
+    "rfi_ipv6_shortform_zero": ("ip=::1", "короткая форма ::0:1 -> loopback"),
+    "rfi_glob_wrapper": ("LIST-SIM:", "glob-обработчик перечислил файлы"),
+    "rfi_zip_wrapper": ("ZIPREAD-SIM:", "zip-обработчик прочитал архив"),
 }
 
 
@@ -419,7 +584,7 @@ _SCHEME_LEAD = re.compile(r"^([a-zA-Z][a-zA-Z0-9+.\-]*)://")
 
 
 def _host_literal(host: str):
-    """Канонизировать хост в IP-литерал (десятичный/hex/восьмеричный/IPv6)."""
+    """Канонизировать хост в IP-литерал (все формы: dec/hex/oct/short/IPv6)."""
     candidate = host
     if host.replace(".", "").isdigit() and "." not in host:
         candidate = str(ipaddress.ip_address(int(host)))  # десятичный литерал
@@ -427,7 +592,17 @@ def _host_literal(host: str):
         candidate = str(ipaddress.ip_address(int(host, 16)))  # hex-литерал
     else:
         parts = host.split(".")
-        if len(parts) == 4 and all(
+        if len(parts) == 2 and all(p.isdigit() for p in parts):
+            candidate = str(
+                ipaddress.ip_address(int(parts[0]) << 24 | int(parts[1]))
+            )  # короткая форма a.b
+        elif len(parts) == 3 and all(p.isdigit() for p in parts):
+            candidate = str(
+                ipaddress.ip_address(
+                    int(parts[0]) << 24 | int(parts[1]) << 16 | int(parts[2])
+                )
+            )  # короткая форма a.b.c
+        elif len(parts) == 4 and all(
             p.isdigit() and (len(p) == 1 or p.startswith("0")) for p in parts
         ):
             candidate = ".".join(str(int(p, 8)) for p in parts)  # восьмеричные
@@ -437,8 +612,16 @@ def _host_literal(host: str):
         return None
 
 
+def _is_internal(literal) -> bool:
+    """Приватность с раскрытием IPv4-mapped форм (scoped-адреса учитываются)."""
+    mapped = getattr(literal, "ipv4_mapped", None)
+    if mapped is not None:
+        literal = mapped
+    return bool(literal.is_private or literal.is_loopback or literal.is_link_local)
+
+
 def safe_remote_url(raw: str, *, allowlist: set[str]) -> str:
-    """Проверить URL по всем слоям R1-R5 (R6/R7 — в транспорте)."""
+    """Проверить URL по слоям R1-R5 (R6/R7/R8 — в транспорте)."""
     value = fully_decode(raw)  # каноническая форма до проверок
     match = _SCHEME_LEAD.match(value.strip())
     if not match or match.group(1).lower() not in {"http", "https"}:
@@ -453,10 +636,9 @@ def safe_remote_url(raw: str, *, allowlist: set[str]) -> str:
         host = host.split(":", 1)[0]  # срезать порт
     host = unquote(host).lower()  # R3: percent-encoded authority
     literal = _host_literal(host)
-    if literal is not None:
-        if literal.is_private or literal.is_loopback or literal.is_link_local:
-            raise DefenseHold("R3", "internal_address_literal")  # R3
-    else:
+    if literal is not None and _is_internal(literal):
+        raise DefenseHold("R3", "internal_address_literal")  # R3
+    if literal is None:
         normalized = unicodedata.normalize("NFKC", host)
         if not normalized.isascii() or normalized != host:
             raise DefenseHold("R4", "homograph_host")  # R4: омоглифы
@@ -465,8 +647,8 @@ def safe_remote_url(raw: str, *, allowlist: set[str]) -> str:
     return value
 
 
-def pinned_fetch(url: str, allowlist: set[str]) -> str:
-    """Транспорт охраняемой реализации: R6 (редиректы) и R7 (пин DNS)."""
+def pinned_fetch(url: str, allowlist: set[str], depth: int = 0) -> str:
+    """Транспорт охраняемой реализации: R6 (редиректы), R7 (пин DNS), R8."""
     parsed = urlsplit(url)
     host = (parsed.hostname or "").lower()
     ip = SIM_DNS.get(host)
@@ -475,34 +657,39 @@ def pinned_fetch(url: str, allowlist: set[str]) -> str:
         if literal.is_private or literal.is_loopback or literal.is_link_local:
             raise DefenseHold("R7", "pinned_internal_ip")  # R7: пин DNS
     if "redirect" in (parsed.path or ""):
-        target = _redirect_target(url)
+        if depth >= _REDIRECT_DEPTH_LIMIT:
+            raise DefenseHold("R8", "redirect_depth_exceeded")  # R8: лимит глубины
+        target = _redirect_target(url) or url  # self-loop: Location сам на себя
         target_host = (urlsplit(target).hostname or "").lower()
         safe_remote_url(target, allowlist=allowlist)  # повторная перевалидация
         if target_host != host:
             raise DefenseHold("R6", "cross_origin_redirect")  # R6
-        return pinned_fetch(target, allowlist)
+        return pinned_fetch(target, allowlist, depth + 1)
     return f"FETCHED host={host}"
 
 
 AVATAR_ALLOWLIST = {TRUSTED_HOST}
 SYNC_ALLOWLIST = {SYNC_HOST}
 
+_AVATAR_VECTORS = {
+    "rfi_userinfo_confusion",
+    "rfi_trusted_redirect_hop",
+    "rfi_tab_authority",
+    "rfi_crlf_inject",
+    "rfi_scheme_case_space",
+    "rfi_data_url",
+    "rfi_expect_wrapper",
+    "rfi_redirect_loop_depth",
+    "rfi_redirect_to_data_hop",
+    "rfi_subdomain_suffix",
+    "rfi_glob_wrapper",
+    "rfi_zip_wrapper",
+}
+
 
 def guarded_run(ctx: RfiSandbox, vector_id: str) -> tuple[bool, str, str]:
     payload = ctx.payloads[vector_id]
-    if vector_id in {
-        "rfi_userinfo_confusion",
-        "rfi_trusted_redirect_hop",
-        "rfi_tab_authority",
-        "rfi_crlf_inject",
-    }:
-        allowlist = AVATAR_ALLOWLIST
-    elif vector_id == "rfi_scheme_case_space":
-        allowlist = AVATAR_ALLOWLIST  # превью ходит только к доверенному
-    elif vector_id in {"rfi_data_url", "rfi_expect_wrapper"}:
-        allowlist = AVATAR_ALLOWLIST
-    else:
-        allowlist = SYNC_ALLOWLIST
+    allowlist = AVATAR_ALLOWLIST if vector_id in _AVATAR_VECTORS else SYNC_ALLOWLIST
     try:
         safe_remote_url(payload, allowlist=allowlist)
         pinned_fetch(payload, allowlist)

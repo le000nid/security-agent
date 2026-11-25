@@ -322,7 +322,7 @@ URL, путь, shell-команда и scanner flags не могут прихо�
 Подробности: [устранение неполадок](docs/TROUBLESHOOTING.md),
 [реестр benchmark](docs/BENCHMARKS.md), [архитектура](docs/ARCHITECTURE.md),
 [CTF-агенты](docs/CTF_AGENTS.md) — профили, встроенные в ядро приложения,
-[Арсенал v8](docs/ARSENAL.md) — векторы атак и слои защиты для LFI/RFI/SQLI.
+[Арсенал v9](docs/ARSENAL.md) — 78 векторов атак и 26 слоёв защиты для LFI/RFI/SQLI.
 
 ## Модель безопасности и ограничения
 

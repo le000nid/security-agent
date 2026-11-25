@@ -1,6 +1,7 @@
 """Arsenal SAST fixture: concatenated open() and archive member writes (CWE-22/23)."""
 
 import os
+import tarfile
 import zipfile
 
 from flask import Flask, request
@@ -24,3 +25,11 @@ def unpack():
     with open(os.path.join(BASE_DIR, member), "wb") as out:
         out.write(data)
     return {"written": len(data)}
+
+
+@app.route("/extract")
+def extract():
+    bundle = request.args.get("bundle", "evil.tar")
+    with tarfile.open(os.path.join(BASE_DIR, bundle)) as tf:
+        tf.extractall("/srv/inbox")
+    return {"status": "extracted"}

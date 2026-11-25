@@ -95,3 +95,71 @@ def test_redirect_pin_stops_cross_origin_hop():
             allowlist=rfi.AVATAR_ALLOWLIST,
         )
     assert pin.value.layer in {"R6", "R5"}
+
+
+# --------------------------------------------------------------------------
+# v10: комплексные векторы и простой залп — явные проверки новых слоёв
+# --------------------------------------------------------------------------
+
+
+def test_host_literal_shortforms_and_padding():
+    loopback = ipaddress.ip_address("127.0.0.1")
+    assert rfi._host_literal("127.1") == loopback
+    assert rfi._host_literal("127.0.1") == loopback
+    assert rfi._host_literal("0177.0000.0000.0001") == loopback
+    assert rfi._host_literal("::0:1") == ipaddress.ip_address("::1")
+    assert rfi._host_literal("::ffff:7f00:1") == ipaddress.ip_address("::ffff:7f00:1")
+    assert rfi._host_literal("fe80::a1%eth0") == ipaddress.ip_address("fe80::a1%eth0")
+
+
+def test_mapped_and_zone_hosts_hold_at_r3():
+    with pytest.raises(DefenseHold) as mapped:
+        rfi.safe_remote_url(
+            "http://[::ffff:7f00:1]/admin", allowlist=rfi.SYNC_ALLOWLIST
+        )
+    assert mapped.value.layer == "R3"
+    with pytest.raises(DefenseHold) as zone:
+        rfi.safe_remote_url(
+            "http://[fe80::a1%25eth0]/admin", allowlist=rfi.SYNC_ALLOWLIST
+        )
+    assert zone.value.layer == "R3"
+
+
+@pytest.mark.parametrize(
+    ("url", "layer"),
+    [
+        ("http://127.1/admin", "R3"),
+        ("http://127.0.1/admin", "R3"),
+        ("http://0177.0000.0000.0001/admin", "R3"),
+        ("http://[::0:1]/admin", "R3"),
+        ("glob:///srv/*", "R1"),
+        ("zip:///etc/shadow", "R1"),
+        ("https://trusted.example.attacker.example/x", "R5"),
+    ],
+)
+def test_simple_barrage_layers(url, layer):
+    with pytest.raises(DefenseHold) as hold:
+        rfi.safe_remote_url(url, allowlist=rfi.SYNC_ALLOWLIST)
+    assert hold.value.layer == layer
+
+
+def test_redirect_loop_hits_depth_cap():
+    with pytest.raises(DefenseHold) as loop:
+        rfi.pinned_fetch(
+            "https://trusted.example/redirect", allowlist=rfi.AVATAR_ALLOWLIST
+        )
+    assert loop.value.layer == "R8"
+
+
+def test_redirect_to_data_holds_scheme_on_target():
+    with pytest.raises(DefenseHold) as data_hop:
+        rfi.pinned_fetch(
+            "https://trusted.example/redirect?to=data://text/plain;base64,QQ==",
+            allowlist=rfi.AVATAR_ALLOWLIST,
+        )
+    assert data_hop.value.layer in {"R1", "R6"}
+
+
+def test_naive_loop_reaches_hop_cap():
+    detail = rfi.naive_fetch("https://trusted.example/redirect", follow=True)
+    assert "REDIRECT-LIMIT-REACHED" in detail

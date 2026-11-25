@@ -2,7 +2,7 @@
 
 from app.agent import arsenal
 
-EXPECTED_VECTORS = {"lfi": 14, "rfi": 15, "sqli": 14}
+EXPECTED_VECTORS = {"lfi": 31, "rfi": 26, "sqli": 21}
 
 
 def main() -> None:
